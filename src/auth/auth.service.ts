@@ -1,26 +1,59 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { UsersService } from '../user/user.service';
+import * as bcrypt from 'bcrypt';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
-  create(createAuthDto: CreateAuthDto) {
-    return 'This action adds a new auth';
+  constructor(
+    private usersService: UsersService,
+    private jwtService: JwtService,
+  ) {}
+
+  async register(registerDto: RegisterDto) {
+    // Kiểm tra email đã tồn tại chưa
+    const existingUser = await this.usersService.findByEmail(registerDto.email);
+    if (existingUser) {
+      throw new BadRequestException('Email đã được sử dụng');
+    }
+
+    // Tạo người dùng mới
+    const newUser = await this.usersService.create(registerDto);
+
+    // Loại bỏ password trước khi trả về
+    const { password, ...result } = newUser as any;
+
+    return {
+      message: 'Đăng ký thành công',
+      user: result,
+    };
   }
 
-  findAll() {
-    return `This action returns all auth`;
-  }
+  async login(loginDto: LoginDto) {
+    // Tìm người dùng theo email
+    const user = await this.usersService.findByEmail(loginDto.email);
+    if (!user) {
+      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+    }
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
-  }
+    // So sánh mật khẩu
+    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+    }
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
-  }
+    // Tạo payload cho JWT
+    const payload = { sub: user.id, email: user.email };
+    
+    // Loại bỏ password trước khi trả về
+    const { password, ...result } = user as any;
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
+    // Tạo và trả về token
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: result,
+    };
   }
 }
