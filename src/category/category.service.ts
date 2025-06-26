@@ -35,19 +35,19 @@ export class CategoryService {
   }
 
   // Giữ nguyên các phương thức khác nhưng chưa triển khai đầy đủ
-  findAll() {
-    return `This action returns all category`;
-  }
+  // findAll() {
+  //   return `This action returns all category`;
+  // }
 
-  findOne(id: number) {
-    return `This action returns a #${id} category`;
-  }
+  // findOne(id: number) {
+  //   return `This action returns a #${id} category`;
+  // }
 
-  update(id: number, updateCategoryDto: UpdateCategoryDto) {
-    return `This action updates a #${id} category`;
-  }
+  // update(id: number, updateCategoryDto: UpdateCategoryDto) {
+  //   return `This action updates a #${id} category`;
+  // }
 
-  remove(id: number) {
-    return `This action removes a #${id} category`;
-  }
+  // remove(id: number) {
+  //   return `This action removes a #${id} category`;
+  // }
 }
