@@ -9,7 +9,7 @@ export class Subcategory {
     name: string;
 
     @Column()
-    categoryId: string; // Lưu ID của category cha
+    categoryId: ObjectId; // ✅ Đổi từ string thành ObjectId
 
     @Column({ default: true })
     isActive: boolean;

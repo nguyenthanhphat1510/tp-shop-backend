@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MongoRepository, ObjectId } from 'typeorm';
+import { ObjectId as MongoObjectId } from 'mongodb'; // Import để tạo ObjectId
 import { Subcategory } from './entities/subcategory.entity';
 import { CreateSubcategoryDto } from './dto/create-subcategory.dto';
 import { UpdateSubcategoryDto } from './dto/update-subcategory.dto';
@@ -17,16 +18,29 @@ export class SubcategoryService {
 
   async create(createSubcategoryDto: CreateSubcategoryDto): Promise<Subcategory> {
     try {
-      // Kiểm tra xem category có tồn tại không
+      console.log('Creating subcategory with data:', createSubcategoryDto);
+      
+      // Chuyển đổi categoryId từ string thành ObjectId
+      let categoryObjectId: ObjectId;
+      
+      if (typeof createSubcategoryDto.categoryId === 'string') {
+        categoryObjectId = new MongoObjectId(createSubcategoryDto.categoryId);
+      } else {
+        categoryObjectId = createSubcategoryDto.categoryId;
+      }
+
+      console.log('Category ObjectId:', categoryObjectId);
+
+      // Tìm category
       const category = await this.categoryRepository.findOne({
-        where: { _id: new ObjectId(createSubcategoryDto.categoryId) }
+        where: { _id: categoryObjectId }
       });
 
       if (!category) {
         throw new NotFoundException(`Không tìm thấy danh mục với ID ${createSubcategoryDto.categoryId}`);
       }
 
-      // Kiểm tra xem subcategory đã tồn tại chưa
+      // Kiểm tra tên subcategory đã tồn tại chưa
       const existingSubcategory = await this.subcategoryRepository.findOne({
         where: { name: createSubcategoryDto.name }
       });
@@ -35,30 +49,69 @@ export class SubcategoryService {
         throw new BadRequestException(`Danh mục con với tên "${createSubcategoryDto.name}" đã tồn tại`);
       }
 
-      // Tạo subcategory mới
-      const newSubcategory = this.subcategoryRepository.create(createSubcategoryDto);
+      // Tạo subcategory mới với categoryId là ObjectId
+      const subcategoryData = {
+        ...createSubcategoryDto,
+        categoryId: categoryObjectId // Đảm bảo categoryId là ObjectId
+      };
+
+      const newSubcategory = this.subcategoryRepository.create(subcategoryData);
       return this.subcategoryRepository.save(newSubcategory);
+      
     } catch (error) {
+      console.error('Error in create subcategory:', error);
+      
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      throw new BadRequestException('Không thể tạo danh mục con. Vui lòng thử lại sau.');
+      
+      throw new BadRequestException(`Lỗi tạo danh mục con: ${error.message}`);
     }
   }
 
-  findAll() {
-    return `This action returns all subcategory`;
+  async findAll(): Promise<Subcategory[]> {
+    return this.subcategoryRepository.find({
+      where: { isActive: true }
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} subcategory`;
+  async findByCategoryId(categoryId: string): Promise<Subcategory[]> {
+    const categoryObjectId = new MongoObjectId(categoryId);
+    return this.subcategoryRepository.find({
+      where: { 
+        categoryId: categoryObjectId, 
+        isActive: true 
+      }
+    });
   }
 
-  update(id: number, updateSubcategoryDto: UpdateSubcategoryDto) {
-    return `This action updates a #${id} subcategory`;
+  async findOne(id: string): Promise<Subcategory> {
+    const objectId = new MongoObjectId(id);
+    const subcategory = await this.subcategoryRepository.findOne({
+      where: { _id: objectId }
+    });
+    
+    if (!subcategory) {
+      throw new BadRequestException(`Không tìm thấy danh mục con với ID ${id}`);
+    }
+    
+    return subcategory;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} subcategory`;
-  }
+  // async update(id: string, updateSubcategoryDto: UpdateSubcategoryDto): Promise<Subcategory> {
+  //   const objectId = new MongoObjectId(id);
+    
+  //   // Nếu có categoryId trong update, chuyển thành ObjectId
+  //   if (updateSubcategoryDto.categoryId) {
+  //     updateSubcategoryDto.categoryId = new MongoObjectId(updateSubcategoryDto.categoryId as string) as any;
+  //   }
+    
+  //   await this.subcategoryRepository.update(objectId, updateSubcategoryDto);
+  //   return this.findOne(id);
+  // }
+
+  // async remove(id: string): Promise<void> {
+  //   const objectId = new MongoObjectId(id);
+  //   await this.subcategoryRepository.delete(objectId);
+  // }
 }

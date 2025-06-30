@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MongoRepository } from 'typeorm';
+import { MongoRepository, ObjectId } from 'typeorm';
 import { Category } from './entities/category.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -14,7 +14,7 @@ export class CategoryService {
 
   async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
     try {
-      // Kiểm tra xem category đã tồn tại chưa
+      // Kiểm tra tên category đã tồn tại chưa
       const existingCategory = await this.categoryRepository.findOne({
         where: { name: createCategoryDto.name }
       });
@@ -34,20 +34,33 @@ export class CategoryService {
     }
   }
 
-  // Giữ nguyên các phương thức khác nhưng chưa triển khai đầy đủ
-  // findAll() {
-  //   return `This action returns all category`;
-  // }
+  async findAll(): Promise<Category[]> {
+    return this.categoryRepository.find({
+      where: { isActive: true }
+    });
+  }
 
-  // findOne(id: number) {
-  //   return `This action returns a #${id} category`;
-  // }
+  async findOne(id: string): Promise<Category> {
+    const objectId = new ObjectId(id);
+    const category = await this.categoryRepository.findOne({
+      where: { _id: objectId }
+    });
+    
+    if (!category) {
+      throw new BadRequestException(`Không tìm thấy danh mục với ID ${id}`);
+    }
+    
+    return category;
+  }
 
-  // update(id: number, updateCategoryDto: UpdateCategoryDto) {
-  //   return `This action updates a #${id} category`;
-  // }
+  async update(id: string, updateCategoryDto: UpdateCategoryDto): Promise<Category> {
+    const objectId = new ObjectId(id);
+    await this.categoryRepository.update(objectId, updateCategoryDto);
+    return this.findOne(id);
+  }
 
-  // remove(id: number) {
-  //   return `This action removes a #${id} category`;
-  // }
+  async remove(id: string): Promise<void> {
+    const objectId = new ObjectId(id);
+    await this.categoryRepository.delete(objectId);
+  }
 }
