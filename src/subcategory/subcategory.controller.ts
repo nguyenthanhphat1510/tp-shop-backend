@@ -24,14 +24,15 @@ export class SubcategoryController {
     return this.subcategoryService.findOne(id);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateSubcategoryDto: UpdateSubcategoryDto) {
-    return this.subcategoryService.update(id, updateSubcategoryDto);
-  }
+  // @Patch(':id')
+  // update(@Param('id') id: string, @Body() updateSubcategoryDto: UpdateSubcategoryDto) {
+  //   return this.subcategoryService.update(id, updateSubcategoryDto);
+  // }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.subcategoryService.remove(id);
-  }
+  // @Delete(':id')
+  // remove(@Param('id') id: string) {
+  //   return this.subcategoryService.remove(id);
+  // }
 }
+
 

@@ -1,4 +1,6 @@
+import 'reflect-metadata'; // ✅ Thêm dòng này ở đầu tiên
 import { NestFactory } from '@nestjs/core';
+
 // Trong main.ts
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';

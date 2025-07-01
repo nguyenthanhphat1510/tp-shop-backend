@@ -1,10 +1,11 @@
-import { Entity, ObjectIdColumn, Column, ObjectId } from 'typeorm';
+import { Entity, ObjectIdColumn, Column, CreateDateColumn, UpdateDateColumn, ObjectId } from 'typeorm';
+
 @Entity('products')
 export class Product {
     @ObjectIdColumn()
     id: ObjectId;
 
-    @Column()
+    @Column({ unique: true })
     name: string;
 
     @Column()
@@ -13,11 +14,17 @@ export class Product {
     @Column()
     price: number;
 
-    @Column()
+    @Column() // URL ảnh từ Cloudinary
     imageUrl: string;
 
-    @Column()
-    category: string;
+    @Column({ nullable: true }) // Public ID của ảnh trên Cloudinary để có thể xóa
+    imagePublicId: string;
+
+    @Column('objectid')
+    categoryId: ObjectId;
+
+    @Column('objectid')
+    subcategoryId: ObjectId;
 
     @Column({ default: 0 })
     stock: number;
@@ -25,10 +32,10 @@ export class Product {
     @Column({ default: true })
     isActive: boolean;
 
-    @Column({ default: () => new Date() })
+    @CreateDateColumn()
     createdAt: Date;
 
-    @Column({ default: () => new Date() })
+    @UpdateDateColumn()
     updatedAt: Date;
 }
 

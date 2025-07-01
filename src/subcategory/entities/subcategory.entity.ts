@@ -8,7 +8,7 @@ export class Subcategory {
     @Column({ unique: true })
     name: string;
 
-    @Column()
+    @Column('objectid')
     categoryId: ObjectId; // ✅ Đổi từ string thành ObjectId
 
     @Column({ default: true })
