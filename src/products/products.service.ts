@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MongoRepository, ObjectId } from 'typeorm';
-import { ObjectId as MongoObjectId } from 'mongodb';
+import { MongoRepository } from 'typeorm';
+import { ObjectId } from 'mongodb';
 import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { Category } from '../category/entities/category.entity';
@@ -29,13 +29,13 @@ export class ProductsService {
       let subcategoryObjectId: ObjectId;
       
       if (typeof createProductDto.categoryId === 'string') {
-        categoryObjectId = new MongoObjectId(createProductDto.categoryId);
+        categoryObjectId = new ObjectId(createProductDto.categoryId);
       } else {
         categoryObjectId = createProductDto.categoryId;
       }
 
       if (typeof createProductDto.subcategoryId === 'string') {
-        subcategoryObjectId = new MongoObjectId(createProductDto.subcategoryId);
+        subcategoryObjectId = new ObjectId(createProductDto.subcategoryId);
       } else {
         subcategoryObjectId = createProductDto.subcategoryId;
       }
@@ -115,8 +115,48 @@ export class ProductsService {
 
   async findAll(): Promise<Product[]> {
     return this.productsRepository.find({
-      where: { isActive: true },
+      where: { isActive: "true" },
       order: { createdAt: 'DESC' }
     });
+  }
+
+  // 🎯 THÊM: Tìm sản phẩm theo ID
+  async findOne(id: string): Promise<Product> {
+    try {
+      console.log('🔍 Finding product with ID:', id);
+      
+      // Kiểm tra ID có hợp lệ không
+      if (!ObjectId.isValid(id)) {
+        throw new BadRequestException(`ID sản phẩm không hợp lệ: ${id}`);
+      }
+
+      // Chuyển đổi string thành ObjectId
+      const objectId = new ObjectId(id);
+      
+      // Tìm sản phẩm trong database
+      const product = await this.productsRepository.findOne({
+        where: { _id: objectId }
+      });
+
+      // Kiểm tra sản phẩm có tồn tại không
+      if (!product) {
+        console.log('❌ Product not found with ID:', id);
+        throw new NotFoundException(`Không tìm thấy sản phẩm với ID: ${id}`);
+      }
+
+      console.log('✅ Product found successfully:', product.name);
+      return product;
+
+    } catch (error) {
+      console.error('❌ Error finding product:', error);
+      
+      // Re-throw known exceptions
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      // Handle unexpected errors
+      throw new BadRequestException(`Lỗi tìm kiếm sản phẩm: ${error.message}`);
+    }
   }
 }
