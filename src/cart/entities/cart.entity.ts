@@ -1,22 +1,24 @@
-import { Entity, ObjectIdColumn, Column, ObjectId } from 'typeorm';
+// ❌ Đừng import ObjectId từ typeorm
+import { Entity, ObjectIdColumn, Column } from 'typeorm';
+import { ObjectId } from 'mongodb'; // ✅ CHỈ import ở đây
 
 @Entity('cart_items')
 export class CartItem {
     @ObjectIdColumn()
     id: ObjectId;
 
-    @Column('objectid') // ✅ Chỉ định type rõ ràng
+    @Column()
     userId: ObjectId;
 
-    @Column('objectid') // ✅ Chỉ định type rõ ràng
+    @Column()
     productId: ObjectId;
 
-    @Column('int', { default: 1 }) // ✅ Chỉ định type rõ ràng
+    @Column({ default: 1 })
     quantity: number;
 
-    @Column('timestamp', { default: () => new Date() }) // ✅ Chỉ định type rõ ràng
+    @Column()
     addedAt: Date;
 
-    @Column('timestamp', { default: () => new Date() }) // ✅ Chỉ định type rõ ràng
+    @Column()
     updatedAt: Date;
 }

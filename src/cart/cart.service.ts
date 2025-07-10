@@ -1,258 +1,275 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MongoRepository, ObjectId } from 'typeorm';
+import { ObjectId } from 'mongodb';
+import { MongoRepository } from 'typeorm';
 import { CartItem } from './entities/cart.entity';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { UpdateCartDto } from './dto/update-cart.dto';
 
+
 @Injectable()
 export class CartService {
-  constructor(
-    @InjectRepository(CartItem)
-    private cartRepository: MongoRepository<CartItem>,
-  ) {}
+    constructor(
+        @InjectRepository(CartItem)
+        private cartRepository: MongoRepository<CartItem>,
+    ) { }
 
-  // ✅ Thêm sản phẩm vào giỏ hàng
-  async addToCart(userId: string, createCartDto: CreateCartDto): Promise<CartItem> {
-    const { productId, quantity = 1 } = createCartDto;
+    // ✅ Thêm sản phẩm vào giỏ hàng
+    async addToCart(userId: string, createCartDto: CreateCartDto): Promise<CartItem> {
+        const { productId, quantity = 1 } = createCartDto;
+        
+        console.log('⚡️ Adding to cart:', { userId, productId, quantity });
 
-    // Validate quantity
-    if (quantity < 1 || quantity > 3) {
-      throw new BadRequestException('Số lượng phải từ 1 đến 3');
+        try {
+            // Kiểm tra ObjectId hợp lệ
+            const userObjId = new ObjectId(userId);
+            const productObjId = new ObjectId(productId);
+            console.log('ObjectIds:', { userObjId, productObjId });
+        } catch (error) {
+            console.error('❌ Invalid ObjectId:', error);
+            throw new BadRequestException('ID không hợp lệ');
+        }
+
+        // Validate quantity
+        if (quantity < 1 || quantity > 50) {
+            throw new BadRequestException('Số lượng phải từ 1 đến 50');
+        }
+
+        // Check existing cart item
+        const existingItem = await this.cartRepository.findOne({
+            where: {
+                userId: new ObjectId(userId),
+                productId: new ObjectId(productId)
+            }
+        });
+
+        if (existingItem) {
+            // Update existing item
+            const newQuantity = existingItem.quantity + quantity;
+
+            if (newQuantity > 50) {
+                throw new BadRequestException('Chỉ được thêm tối đa 50 sản phẩm cùng loại');
+            }
+
+            // THAY ĐỔI TẠI ĐÂY - Sử dụng cách khác để cập nhật
+            existingItem.quantity = newQuantity;
+            existingItem.updatedAt = new Date();
+            
+            // Lưu trực tiếp đối tượng thay vì dùng findOneAndUpdate
+            return await this.cartRepository.save(existingItem);
+            
+            /* CŨ - có thể gây lỗi với MongoDB
+            const result = await this.cartRepository.findOneAndUpdate(
+                { _id: existingItem.id },
+                {
+                    $set: {
+                        quantity: newQuantity,
+                        updatedAt: new Date()
+                    }
+                },
+                { returnDocument: 'after' }
+            );
+
+            if (!result?.value) {
+                throw new NotFoundException('Không thể cập nhật giỏ hàng');
+            }
+
+            return result.value;
+            */
+        } else {
+            // Create new cart item
+            const cartItem = this.cartRepository.create({
+                userId: new ObjectId(userId),
+                productId: new ObjectId(productId),
+                quantity,
+                addedAt: new Date(),
+                updatedAt: new Date()
+            });
+
+            return this.cartRepository.save(cartItem);
+        }
     }
 
-    // TODO: Validate product exists and stock (cần implement Product service)
-    // const product = await this.productService.findOne(productId);
-    // if (!product) {
-    //   throw new NotFoundException('Sản phẩm không tồn tại');
-    // }
-    // if (product.stock < quantity) {
-    //   throw new BadRequestException(`Chỉ còn ${product.stock} sản phẩm trong kho`);
-    // }
+    // ✅ Tăng số lượng sản phẩm
+    async increaseQuantity(userId: string, cartItemId: string): Promise<CartItem> {
+        const cartItem = await this.cartRepository.findOne({
+            where: {
+                _id: new ObjectId(cartItemId),
+                userId: new ObjectId(userId)
+            }
+        });
 
-    // Check existing cart item
-    const existingItem = await this.cartRepository.findOne({
-      where: { 
-        userId: new ObjectId(userId), 
-        productId: new ObjectId(productId) 
-      }
-    });
+        if (!cartItem) {
+            throw new NotFoundException('Sản phẩm không có trong giỏ hàng');
+        }
 
-    if (existingItem) {
-      // Update existing item
-      const newQuantity = existingItem.quantity + quantity;
-      
-      if (newQuantity > 3) {
-        throw new BadRequestException('Chỉ được thêm tối đa 3 sản phẩm cùng loại');
-      }
+        // SỬA GIỚI HẠN TỪ 3 THÀNH 50
+        if (cartItem.quantity >= 50) {
+            throw new BadRequestException('Chỉ được thêm tối đa 50 sản phẩm cùng loại');
+        }
 
-      const result = await this.cartRepository.findOneAndUpdate(
-        { _id: existingItem.id },
-        { 
-          $set: { 
-            quantity: newQuantity,
-            updatedAt: new Date()
-          } 
-        },
-        { returnDocument: 'after' }
-      );
+        // TODO: Validate stock
+        // const product = await this.productService.findOne(cartItem.productId.toString());
+        // if (product.stock < cartItem.quantity + 1) {
+        //   throw new BadRequestException(`Chỉ còn ${product.stock} sản phẩm trong kho`);
+        // }
 
-      if (!result?.value) {
-        throw new NotFoundException('Không thể cập nhật giỏ hàng');
-      }
+        const result = await this.cartRepository.findOneAndUpdate(
+            { _id: new ObjectId(cartItemId) },
+            {
+                $set: {
+                    quantity: cartItem.quantity + 1,
+                    updatedAt: new Date()
+                }
+            },
+            { returnDocument: 'after' }
+        );
 
-      return result.value;
-    } else {
-      // Create new cart item
-      const cartItem = this.cartRepository.create({
-        userId: new ObjectId(userId),
-        productId: new ObjectId(productId),
-        quantity
-      });
+        if (!result?.value) {
+            throw new NotFoundException('Không thể cập nhật giỏ hàng');
+        }
 
-      return this.cartRepository.save(cartItem);
-    }
-  }
-
-  // ✅ Tăng số lượng sản phẩm
-  async increaseQuantity(userId: string, cartItemId: string): Promise<CartItem> {
-    const cartItem = await this.cartRepository.findOne({
-      where: { 
-        _id: new ObjectId(cartItemId),
-        userId: new ObjectId(userId)
-      }
-    });
-
-    if (!cartItem) {
-      throw new NotFoundException('Sản phẩm không có trong giỏ hàng');
+        return result.value;
     }
 
-    if (cartItem.quantity >= 3) {
-      throw new BadRequestException('Chỉ được thêm tối đa 3 sản phẩm cùng loại');
+    // ✅ Giảm số lượng sản phẩm
+    async decreaseQuantity(userId: string, cartItemId: string): Promise<CartItem | { removed: boolean; cartItemId: string }> {
+        const cartItem = await this.cartRepository.findOne({
+            where: {
+                _id: new ObjectId(cartItemId),
+                userId: new ObjectId(userId)
+            }
+        });
+
+        if (!cartItem) {
+            throw new NotFoundException('Sản phẩm không có trong giỏ hàng');
+        }
+
+        if (cartItem.quantity <= 1) {
+            // Remove item if quantity would be 0
+            await this.cartRepository.deleteOne({ _id: new ObjectId(cartItemId) });
+            return { removed: true, cartItemId };
+        }
+
+        const result = await this.cartRepository.findOneAndUpdate(
+            { _id: new ObjectId(cartItemId) },
+            {
+                $set: {
+                    quantity: cartItem.quantity - 1,
+                    updatedAt: new Date()
+                }
+            },
+            { returnDocument: 'after' }
+        );
+
+        if (!result?.value) {
+            throw new NotFoundException('Không thể cập nhật giỏ hàng');
+        }
+
+        return result.value;
     }
 
-    // TODO: Validate stock
-    // const product = await this.productService.findOne(cartItem.productId.toString());
-    // if (product.stock < cartItem.quantity + 1) {
-    //   throw new BadRequestException(`Chỉ còn ${product.stock} sản phẩm trong kho`);
-    // }
+    // ✅ Xóa sản phẩm khỏi giỏ hàng
+    async removeFromCart(userId: string, cartItemId: string): Promise<{ removed: boolean; cartItemId: string }> {
+        const result = await this.cartRepository.deleteOne({
+            _id: new ObjectId(cartItemId),
+            userId: new ObjectId(userId)
+        });
 
-    const result = await this.cartRepository.findOneAndUpdate(
-      { _id: new ObjectId(cartItemId) },
-      { 
-        $set: { 
-          quantity: cartItem.quantity + 1,
-          updatedAt: new Date()
-        } 
-      },
-      { returnDocument: 'after' }
-    );
+        if (result.deletedCount === 0) {
+            throw new NotFoundException('Sản phẩm không có trong giỏ hàng');
+        }
 
-    if (!result?.value) {
-      throw new NotFoundException('Không thể cập nhật giỏ hàng');
+        return { removed: true, cartItemId };
     }
 
-    return result.value;
-  }
+    // ✅ Lấy giỏ hàng
+    async getCart(userId: string): Promise<{
+        cartItems: CartItem[];
+        totalItems: number;
+        count: number;
+    }> {
+        const cartItems = await this.cartRepository.find({
+            where: { userId: new ObjectId(userId) },
+            order: { addedAt: 'DESC' }
+        });
 
-  // ✅ Giảm số lượng sản phẩm
-  async decreaseQuantity(userId: string, cartItemId: string): Promise<CartItem | { removed: boolean; cartItemId: string }> {
-    const cartItem = await this.cartRepository.findOne({
-      where: { 
-        _id: new ObjectId(cartItemId),
-        userId: new ObjectId(userId)
-      }
-    });
+        const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-    if (!cartItem) {
-      throw new NotFoundException('Sản phẩm không có trong giỏ hàng');
+        return {
+            cartItems,
+            totalItems,
+            count: cartItems.length
+        };
     }
 
-    if (cartItem.quantity <= 1) {
-      // Remove item if quantity would be 0
-      await this.cartRepository.deleteOne({ _id: new ObjectId(cartItemId) });
-      return { removed: true, cartItemId };
+    // ✅ Xóa toàn bộ giỏ hàng
+    async clearCart(userId: string): Promise<{ deletedCount: number }> {
+        const result = await this.cartRepository.deleteMany({
+            userId: new ObjectId(userId)
+        });
+
+        return { deletedCount: result.deletedCount || 0 };
     }
 
-    const result = await this.cartRepository.findOneAndUpdate(
-      { _id: new ObjectId(cartItemId) },
-      { 
-        $set: { 
-          quantity: cartItem.quantity - 1,
-          updatedAt: new Date()
-        } 
-      },
-      { returnDocument: 'after' }
-    );
+    // ✅ Validate giỏ hàng trước khi thanh toán
+    async validateCart(userId: string): Promise<{
+        cartItems: CartItem[];
+        totalItems: number;
+        isValid: boolean;
+    }> {
+        const cartItems = await this.cartRepository.find({
+            where: { userId: new ObjectId(userId) }
+        });
 
-    if (!result?.value) {
-      throw new NotFoundException('Không thể cập nhật giỏ hàng');
+        if (cartItems.length === 0) {
+            throw new BadRequestException('Giỏ hàng trống');
+        }
+
+        // TODO: Validate stock for each item
+        // const stockValidation = [];
+        // for (const cartItem of cartItems) {
+        //   const product = await this.productService.findOne(cartItem.productId.toString());
+        //   if (product.stock < cartItem.quantity) {
+        //     stockValidation.push({
+        //       cartItemId: cartItem.id,
+        //       productId: cartItem.productId,
+        //       productName: product.name,
+        //       requested: cartItem.quantity,
+        //       available: product.stock
+        //     });
+        //   }
+        // }
+
+        // if (stockValidation.length > 0) {
+        //   throw new BadRequestException('Một số sản phẩm không đủ hàng');
+        // }
+
+        const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+        return {
+            cartItems,
+            totalItems,
+            isValid: true
+        };
     }
 
-    return result.value;
-  }
-
-  // ✅ Xóa sản phẩm khỏi giỏ hàng
-  async removeFromCart(userId: string, cartItemId: string): Promise<{ removed: boolean; cartItemId: string }> {
-    const result = await this.cartRepository.deleteOne({
-      _id: new ObjectId(cartItemId),
-      userId: new ObjectId(userId)
-    });
-
-    if (result.deletedCount === 0) {
-      throw new NotFoundException('Sản phẩm không có trong giỏ hàng');
+    // ✅ Get cart count
+    async getCartCount(userId: string): Promise<number> {
+        return this.cartRepository.count({
+            where: { userId: new ObjectId(userId) }
+        });
     }
 
-    return { removed: true, cartItemId };
-  }
+    // ✅ Check if product in cart
+    async isProductInCart(userId: string, productId: string): Promise<boolean> {
+        const cartItem = await this.cartRepository.findOne({
+            where: {
+                userId: new ObjectId(userId),
+                productId: new ObjectId(productId)
+            }
+        });
 
-  // ✅ Lấy giỏ hàng
-  async getCart(userId: string): Promise<{
-    cartItems: CartItem[];
-    totalItems: number;
-    count: number;
-  }> {
-    const cartItems = await this.cartRepository.find({
-      where: { userId: new ObjectId(userId) },
-      order: { addedAt: 'DESC' }
-    });
-
-    const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-
-    return {
-      cartItems,
-      totalItems,
-      count: cartItems.length
-    };
-  }
-
-  // ✅ Xóa toàn bộ giỏ hàng
-  async clearCart(userId: string): Promise<{ deletedCount: number }> {
-    const result = await this.cartRepository.deleteMany({
-      userId: new ObjectId(userId)
-    });
-
-    return { deletedCount: result.deletedCount || 0 };
-  }
-
-  // ✅ Validate giỏ hàng trước khi thanh toán
-  async validateCart(userId: string): Promise<{
-    cartItems: CartItem[];
-    totalItems: number;
-    isValid: boolean;
-  }> {
-    const cartItems = await this.cartRepository.find({
-      where: { userId: new ObjectId(userId) }
-    });
-
-    if (cartItems.length === 0) {
-      throw new BadRequestException('Giỏ hàng trống');
+        return !!cartItem;
     }
-
-    // TODO: Validate stock for each item
-    // const stockValidation = [];
-    // for (const cartItem of cartItems) {
-    //   const product = await this.productService.findOne(cartItem.productId.toString());
-    //   if (product.stock < cartItem.quantity) {
-    //     stockValidation.push({
-    //       cartItemId: cartItem.id,
-    //       productId: cartItem.productId,
-    //       productName: product.name,
-    //       requested: cartItem.quantity,
-    //       available: product.stock
-    //     });
-    //   }
-    // }
-
-    // if (stockValidation.length > 0) {
-    //   throw new BadRequestException('Một số sản phẩm không đủ hàng');
-    // }
-
-    const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-
-    return {
-      cartItems,
-      totalItems,
-      isValid: true
-    };
-  }
-
-  // ✅ Get cart count
-  async getCartCount(userId: string): Promise<number> {
-    return this.cartRepository.count({
-      where: { userId: new ObjectId(userId) }
-    });
-  }
-
-  // ✅ Check if product in cart
-  async isProductInCart(userId: string, productId: string): Promise<boolean> {
-    const cartItem = await this.cartRepository.findOne({
-      where: {
-        userId: new ObjectId(userId),
-        productId: new ObjectId(productId)
-      }
-    });
-
-    return !!cartItem;
-  }
 }

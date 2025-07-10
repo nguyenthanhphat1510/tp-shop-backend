@@ -8,6 +8,6 @@ export class CreateCartDto {
     @IsNumber()
     @IsOptional()
     @Min(1)
-    @Max(3)
+    @Max(50) // Sửa thành 50 để khớp với logic service
     quantity?: number = 1;
 }
