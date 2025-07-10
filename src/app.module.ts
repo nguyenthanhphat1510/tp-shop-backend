@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { CategoryModule } from './category/category.module';
 import { SubcategoryModule } from './subcategory/subcategory.module';
+import { CartModule } from './cart/cart.module';
 
 
 @Module({
@@ -18,6 +19,7 @@ import { SubcategoryModule } from './subcategory/subcategory.module';
       envFilePath: '.env',
     }),
     DatabaseModule,
+    CartModule,
     // UsersModule,
     // AuthModule,
     ProductsModule,
