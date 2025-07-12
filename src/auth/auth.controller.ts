@@ -22,6 +22,19 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   getProfile(@GetUser() user) {
-    return user;
+    return {
+      success: true,
+      data: user
+    };
+  }
+
+  @Post('refresh')
+  async refresh(@Body('refreshToken') refreshToken: string) {
+    return this.authService.refreshTokens(refreshToken);
+  }
+
+  @Post('logout')
+  async logout() {
+    return this.authService.logout();
   }
 }
