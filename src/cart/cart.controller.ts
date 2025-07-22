@@ -8,8 +8,10 @@ import {
     Param,
     Request,
     HttpCode,
-    HttpStatus
+    HttpStatus,
+    UseGuards
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { CartService } from './cart.service';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { ObjectId } from 'mongodb';
@@ -18,12 +20,20 @@ import { ObjectId } from 'mongodb';
 export class CartController {
     constructor(private readonly cartService: CartService) {}
 
-    // ✅ Thêm sản phẩm vào giỏ hàng
+    // ✅ Thêm sản phẩm vào giỏ hàng (yêu cầu đăng nhập)
+    @UseGuards(AuthGuard('jwt'))
     @Post('add')
     @HttpCode(HttpStatus.OK)
     async addToCart(@Request() req: any, @Body() createCartDto: CreateCartDto) {
-        // TODO: Get userId from JWT token
-        const userId = req.user?.id || '507f1f77bcf86cd799439011'; // Mock user ID for testing
+        // Lấy userId từ JWT token
+        const userId = req.user?.sub;
+        if (!userId) {
+            return {
+                success: false,
+                message: 'Bạn chưa đăng nhập',
+                data: null
+            };
+        }
 
         const cartItem = await this.cartService.addToCart(userId, createCartDto);
 

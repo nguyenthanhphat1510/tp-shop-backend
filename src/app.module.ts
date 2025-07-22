@@ -10,6 +10,9 @@ import { UserModule } from './user/user.module';
 import { CategoryModule } from './category/category.module';
 import { SubcategoryModule } from './subcategory/subcategory.module';
 import { CartModule } from './cart/cart.module';
+import { OrderModule } from './order/order.module'; 
+
+
 
 
 @Module({
@@ -20,6 +23,7 @@ import { CartModule } from './cart/cart.module';
     }),
     DatabaseModule,
     CartModule,
+
     // UsersModule,
     // AuthModule,
     ProductsModule,
@@ -27,6 +31,7 @@ import { CartModule } from './cart/cart.module';
     UserModule,
     CategoryModule,
     SubcategoryModule,
+     OrderModule,
   ],
 })
 export class AppModule {}
