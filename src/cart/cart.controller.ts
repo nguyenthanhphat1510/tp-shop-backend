@@ -26,7 +26,7 @@ export class CartController {
     @HttpCode(HttpStatus.OK)
     async addToCart(@Request() req: any, @Body() createCartDto: CreateCartDto) {
         // Lấy userId từ JWT token
-        const userId = req.user?.sub;
+        const userId = req.user?.id;
         if (!userId) {
             return {
                 success: false,
@@ -157,10 +157,18 @@ export class CartController {
         }
     }
 
-    // ✅ Lấy giỏ hàng
+    // ✅ Lấy giỏ hàng (yêu cầu đăng nhập)
+    @UseGuards(AuthGuard('jwt'))
     @Get()
     async getCart(@Request() req: any) {
-        const userId = req.user?.id || '507f1f77bcf86cd799439011'; // Mock user ID for testing
+        const userId = req.user?.id;
+        if (!userId) {
+            return {
+                success: false,
+                message: 'Bạn chưa đăng nhập',
+                data: null
+            };
+        }
 
         const cartData = await this.cartService.getCart(userId);
 

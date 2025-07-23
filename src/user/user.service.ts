@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MongoRepository, ObjectId } from 'typeorm';
+import { ObjectId } from 'mongodb'; // chỉ import ObjectId từ mongodb
+import { MongoRepository } from 'typeorm'; // import MongoRepository từ typeorm
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
