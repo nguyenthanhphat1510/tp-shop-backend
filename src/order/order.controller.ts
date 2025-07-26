@@ -12,10 +12,18 @@ export class OrderController {
 
     // 🆕 Tạo đơn hàng mới
     // @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard) // Thêm dòng này!
     @Post()
     async create(@Body() createOrderDto: CreateOrderDto, @Request() req) {
+        const userId = req.user?.id; // hoặc req.user?.userId tùy JWT của bạn
+        if (!userId) {
+            return {
+                success: false,
+                message: 'Bạn chưa đăng nhập',
+                data: null
+            };
+        }
         try {
-            const userId = req.user.sub || req.user.userId;
             const order = await this.orderService.create(userId, createOrderDto);
 
             return {

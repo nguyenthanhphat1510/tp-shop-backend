@@ -44,34 +44,40 @@ export class CartController {
         };
     }
 
-    // ✅ THÊM route tăng số lượng
-    @Put('increase/:cartItemId')
+    // ✅ Tăng số lượng theo productId
+    @Put('increase/:productId')
+    @UseGuards(AuthGuard('jwt'))
     async increaseQuantity(
-        @Param('cartItemId') cartItemId: string,
+        @Param('productId') productId: string,
         @Request() req: any
     ) {
         try {
-            // Validate ObjectId
-            if (!ObjectId.isValid(cartItemId)) {
+            if (!ObjectId.isValid(productId)) {
                 return {
                     success: false,
-                    message: 'Cart Item ID không hợp lệ',
+                    message: 'Product ID không hợp lệ',
                     data: null
                 };
             }
 
-            const userId = req.user?.userId || req.user?.id || '507f1f77bcf86cd799439011';
-            
-            console.log('🔍 Increase quantity:', { userId, cartItemId });
-            
-            const result = await this.cartService.increaseQuantity(userId, cartItemId);
-            
+            // CHỈ lấy userId từ token
+            const userId = req.user?.id;
+            if (!userId) {
+                return {
+                    success: false,
+                    message: 'Bạn chưa đăng nhập',
+                    data: null
+                };
+            }
+
+            console.log('🔍 Increase quantity:', { userId, productId });
+
+            const result = await this.cartService.increaseQuantity(userId, productId);
+
             return {
                 success: true,
                 message: 'Tăng số lượng thành công',
-                data: {
-                    cartItem: result
-                }
+                data: { cartItem: result }
             };
         } catch (error) {
             console.error('❌ Error in increaseQuantity:', error);
@@ -83,28 +89,26 @@ export class CartController {
         }
     }
 
-    // ✅ THÊM route giảm số lượng
-    @Put('decrease/:cartItemId')
+    // ✅ Giảm số lượng theo productId
+    @Put('decrease/:productId')
     async decreaseQuantity(
-        @Param('cartItemId') cartItemId: string,
+        @Param('productId') productId: string,
         @Request() req: any
     ) {
         try {
-            // Validate ObjectId
-            if (!ObjectId.isValid(cartItemId)) {
+            if (!ObjectId.isValid(productId)) {
                 return {
                     success: false,
-                    message: 'Cart Item ID không hợp lệ',
+                    message: 'Product ID không hợp lệ',
                     data: null
                 };
             }
 
             const userId = req.user?.userId || req.user?.id || '507f1f77bcf86cd799439011';
-            
-            console.log('🔍 Decrease quantity:', { userId, cartItemId });
-            
-            const result = await this.cartService.decreaseQuantity(userId, cartItemId);
-            
+            console.log('🔍 Decrease quantity:', { userId, productId });
+
+            const result = await this.cartService.decreaseQuantity(userId, productId);
+
             return {
                 success: true,
                 message: 'Giảm số lượng thành công',
@@ -120,28 +124,26 @@ export class CartController {
         }
     }
 
-    // ✅ THÊM route xóa sản phẩm (nếu chưa có)
-    @Delete('remove/:cartItemId')
+    // ✅ Xóa sản phẩm theo productId
+    @Delete('remove/:productId')
     async removeFromCart(
-        @Param('cartItemId') cartItemId: string,
+        @Param('productId') productId: string,
         @Request() req: any
     ) {
         try {
-            // Validate ObjectId
-            if (!ObjectId.isValid(cartItemId)) {
+            if (!ObjectId.isValid(productId)) {
                 return {
                     success: false,
-                    message: 'Cart Item ID không hợp lệ',
+                    message: 'Product ID không hợp lệ',
                     data: null
                 };
             }
 
             const userId = req.user?.userId || req.user?.id || '507f1f77bcf86cd799439011';
-            
-            console.log('🔍 Remove from cart:', { userId, cartItemId });
-            
-            const result = await this.cartService.removeFromCart(userId, cartItemId);
-            
+            console.log('🔍 Remove from cart:', { userId, productId });
+
+            const result = await this.cartService.removeFromCart(userId, productId);
+
             return {
                 success: true,
                 message: 'Xóa sản phẩm thành công',

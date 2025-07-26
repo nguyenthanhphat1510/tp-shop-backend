@@ -87,19 +87,20 @@ export class CartService {
         }
     }
 
-    async increaseQuantity(userId: string, cartItemId: string): Promise<CartItem> {
-        // ✅ THÊM validation ObjectId
+    async increaseQuantity(userId: string, productId: string): Promise<CartItem> {
+        // Validate ObjectId
         try {
             new ObjectId(userId);
-            new ObjectId(cartItemId);
+            new ObjectId(productId);
         } catch (error) {
             throw new BadRequestException('ID không hợp lệ');
         }
 
+        // Tìm cart item theo userId và productId
         const cartItem = await this.cartRepository.findOne({
             where: {
-                _id: new ObjectId(cartItemId),
-                userId: new ObjectId(userId)
+                userId: new ObjectId(userId),
+                productId: new ObjectId(productId)
             }
         });
 
@@ -113,23 +114,22 @@ export class CartService {
 
         cartItem.quantity += 1;
         cartItem.updatedAt = new Date();
-        
+
         return await this.cartRepository.save(cartItem);
     }
 
-    async decreaseQuantity(userId: string, cartItemId: string): Promise<CartItem | { removed: boolean; cartItemId: string }> {
-        // ✅ THÊM validation ObjectId
+    async decreaseQuantity(userId: string, productId: string): Promise<CartItem | { removed: boolean; productId: string }> {
         try {
             new ObjectId(userId);
-            new ObjectId(cartItemId);
+            new ObjectId(productId);
         } catch (error) {
             throw new BadRequestException('ID không hợp lệ');
         }
 
         const cartItem = await this.cartRepository.findOne({
             where: {
-                _id: new ObjectId(cartItemId),
-                userId: new ObjectId(userId)
+                userId: new ObjectId(userId),
+                productId: new ObjectId(productId)
             }
         });
 
@@ -138,27 +138,30 @@ export class CartService {
         }
 
         if (cartItem.quantity <= 1) {
-            await this.cartRepository.deleteOne({ _id: new ObjectId(cartItemId) });
-            return { removed: true, cartItemId };
+            await this.cartRepository.deleteOne({
+                userId: new ObjectId(userId),
+                productId: new ObjectId(productId)
+            });
+            return { removed: true, productId };
         }
 
         cartItem.quantity -= 1;
         cartItem.updatedAt = new Date();
-        
+
         return await this.cartRepository.save(cartItem);
     }
 
-    async removeFromCart(userId: string, cartItemId: string): Promise<{ removed: boolean; cartItemId: string }> {
+    async removeFromCart(userId: string, productId: string): Promise<{ removed: boolean; productId: string }> {
         const result = await this.cartRepository.deleteOne({
-            _id: new ObjectId(cartItemId),
-            userId: new ObjectId(userId)
+            userId: new ObjectId(userId),
+            productId: new ObjectId(productId)
         });
 
         if (result.deletedCount === 0) {
             throw new NotFoundException('Sản phẩm không có trong giỏ hàng');
         }
 
-        return { removed: true, cartItemId };
+        return { removed: true, productId };
     }
 
     async getCart(userId: string): Promise<{
