@@ -173,7 +173,9 @@ export class OrderService {
       const orderItem = this.orderItemRepository.create({
         productId: cartItem.productId,
         productName: product.name,
-        productImageUrl: product.imageUrl || '/placeholder.jpg',
+        productImageUrl: Array.isArray(product.imageUrls) && product.imageUrls.length > 0
+          ? product.imageUrls[0]
+          : '/placeholder.jpg',
         unitPrice: product.price,
         quantity: cartItem.quantity,
         subtotal,
@@ -205,7 +207,9 @@ export class OrderService {
       const orderItem = this.orderItemRepository.create({
         productId: new ObjectId(item.productId),
         productName: product.name,
-        productImageUrl: product.imageUrl || '/placeholder.jpg',
+        productImageUrl: Array.isArray(product.imageUrls) && product.imageUrls.length > 0
+          ? product.imageUrls[0]
+          : '/placeholder.jpg',
         unitPrice: product.price,
         quantity: item.quantity,
         subtotal,

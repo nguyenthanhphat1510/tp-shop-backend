@@ -1,46 +1,158 @@
-import { Controller, Get, Post, Body, UseGuards,  HttpStatus,HttpCode, Param, UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  Body, 
+  Patch, 
+  Param, 
+  Delete, 
+  Put,
+  UseInterceptors, 
+  UploadedFiles 
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) { }
+  constructor(private readonly productsService: ProductsService) {}
 
-  @Post()
-  // @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('image'))
-  create(
-    @Body() createProductDto: CreateProductDto,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: /^image\/(jpeg|jpg|png|webp)$/ }),
-        ],
-        fileIsRequired: false, // Ảnh không bắt buộc
-      }),
-    )
-    file?: Express.Multer.File,
-  ) {
-    return this.productsService.create(createProductDto, file);
-  }
-
+  // GET /products - Lấy tất cả sản phẩm
   @Get()
-  findAll() {
-    return this.productsService.findAll();
+  async findAll() {
+    try {
+      console.log('📋 GET /products');
+      const products = await this.productsService.findAll();
+      return products;
+    } catch (error) {
+      console.error('❌ Error in findAll controller:', error);
+      throw error;
+    }
   }
-  // 🎯 THÊM: GET /products/:id - Tìm sản phẩm theo ID
+
+  // GET /products/:id - Lấy sản phẩm theo ID
   @Get(':id')
-  @HttpCode(HttpStatus.OK)
   async findOne(@Param('id') id: string) {
-    console.log('🌐 API Request: GET /products/' + id);
-
-    const product = await this.productsService.findOne(id);
-
-    console.log('✅ API Response: Product found');
-    return product; // Trả về trực tiếp product object
+    try {
+      console.log(`📋 GET /products/${id}`);
+      const product = await this.productsService.findOne(id);
+      return {
+        success: true,
+        data: product
+      };
+    } catch (error) {
+      console.error('❌ Error in findOne controller:', error);
+      throw error;
+    }
   }
 
+  // ✅ PATCH /products/:id/toggle - Toggle trạng thái (true ↔ false)
+  @Patch(':id/toggle')
+  async toggleStatus(@Param('id') id: string) {
+    try {
+      console.log(`🔄 PATCH /products/${id}/toggle`);
+      
+      const updatedProduct = await this.productsService.toggleStatus(id);
+      
+      return {
+        success: true,
+        message: `Sản phẩm đã được ${updatedProduct.isActive ? 'kích hoạt' : 'tạm dừng'}`,
+        data: updatedProduct,
+        newStatus: updatedProduct.isActive ? 'active' : 'inactive'
+      };
+    } catch (error) {
+      console.error('❌ Error in toggleStatus controller:', error);
+      throw error;
+    }
+  }
+
+  // ✅ DELETE /products/:id - Soft delete (luôn chuyển thành false)
+  @Delete(':id')
+  async softDelete(@Param('id') id: string) {
+    try {
+      console.log(`🗑️ DELETE /products/${id}`);
+      
+      const deletedProduct = await this.productsService.softDelete(id);
+      
+      return {
+        success: true,
+        message: 'Sản phẩm đã được chuyển sang trạng thái tạm dừng',
+        data: deletedProduct
+      };
+    } catch (error) {
+      console.error('❌ Error in softDelete controller:', error);
+      throw error;
+    }
+  }
+
+  // POST /products - Tạo sản phẩm mới
+  @Post()
+  @UseInterceptors(FilesInterceptor('files', 10))
+  async create(
+    @Body() createProductDto: CreateProductDto,
+    @UploadedFiles() files: Express.Multer.File[]
+  ) {
+    try {
+      console.log('📝 POST /products');
+      const product = await this.productsService.create(createProductDto, files);
+      return {
+        success: true,
+        message: 'Tạo sản phẩm thành công',
+        data: product
+      };
+    } catch (error) {
+      console.error('❌ Error in create controller:', error);
+      throw error;
+    }
+  }
+
+  // ✅ PUT /products/:id - Full update sản phẩm
+  @Put(':id')
+  @UseInterceptors(FilesInterceptor('files', 10))
+  async update(
+    @Param('id') id: string,
+    @Body() updateProductDto: CreateProductDto,
+    @UploadedFiles() files: Express.Multer.File[]
+  ) {
+    try {
+      console.log(`📝 PUT /products/${id}`);
+      console.log('Update data:', updateProductDto);
+      console.log('Files count:', files?.length || 0);
+      
+      const updatedProduct = await this.productsService.update(id, updateProductDto, files);
+      
+      return {
+        success: true,
+        message: 'Cập nhật sản phẩm thành công',
+        data: updatedProduct
+      };
+    } catch (error) {
+      console.error('❌ Error in update controller:', error);
+      throw error;
+    }
+  }
+
+  // ✅ PATCH /products/:id - Partial update sản phẩm
+  @Patch(':id')
+  async partialUpdate(
+    @Param('id') id: string,
+    @Body() updateData: Partial<CreateProductDto>
+  ) {
+    try {
+      console.log(`🔧 PATCH /products/${id}`);
+      console.log('Partial update data:', updateData);
+      
+      const updatedProduct = await this.productsService.partialUpdate(id, updateData);
+      
+      return {
+        success: true,
+        message: 'Cập nhật sản phẩm thành công',
+        data: updatedProduct
+      };
+    } catch (error) {
+      console.error('❌ Error in partialUpdate controller:', error);
+      throw error;
+    }
+  }
 }

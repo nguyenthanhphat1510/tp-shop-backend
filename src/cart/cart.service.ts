@@ -191,13 +191,15 @@ export class CartService {
                     updatedAt: item.updatedAt,
                     
                     product: {
-                        id: (product as any)._id || product.id,
-                        name: product.name,
-                        price: product.price,
-                        imageUrl: product.imageUrl || (product as any).image || '/placeholder.jpg',
-                        stock: product.stock,
-                        category: (product as any).categoryId,
-                        description: product.description
+                        id: (product as any)._id?.toString() || (product as any).id?.toString() || 'unknown',
+                        name: product.name || 'Tên sản phẩm không xác định',
+                        price: product.price || 0,
+                        imageUrl: Array.isArray(product.imageUrls) && product.imageUrls.length > 0
+        ? product.imageUrls[0]
+        : (product as any).image || '/placeholder.jpg',
+                        stock: product.stock || 0,
+                        category: (product as any).categoryId || 'Không xác định',
+                        description: product.description || ''
                     },
                     
                     totalPrice: product.price * item.quantity

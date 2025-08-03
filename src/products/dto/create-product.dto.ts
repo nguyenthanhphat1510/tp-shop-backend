@@ -40,5 +40,10 @@ export class CreateProductDto {
 
     @IsBoolean()
     @IsOptional()
+    @Transform(({ value }) => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'string') return value === 'true';
+        return undefined;
+    })
     isActive?: boolean;
 }

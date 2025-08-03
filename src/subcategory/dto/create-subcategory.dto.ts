@@ -16,11 +16,7 @@ export class CreateSubcategoryDto {
     })
     categoryId: ObjectId; // ✅ Đổi thành ObjectId
 
-    @IsString()
-    @IsOptional()
-    description?: string;
-
     @IsBoolean()
     @IsOptional()
-    isActive?: boolean;
+    isActive?: boolean = true;
 }

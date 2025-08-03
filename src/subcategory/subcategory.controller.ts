@@ -19,6 +19,13 @@ export class SubcategoryController {
     return this.subcategoryService.findAll();
   }
 
+  // ✅ Thêm endpoint để lấy subcategories theo categoryId
+  @Get('category/:categoryId')
+  findByCategoryId(@Param('categoryId') categoryId: string) {
+    console.log('Finding subcategories for category:', categoryId);
+    return this.subcategoryService.findByCategoryId(categoryId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.subcategoryService.findOne(id);

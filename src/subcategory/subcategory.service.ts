@@ -52,7 +52,8 @@ export class SubcategoryService {
       // Tạo subcategory mới với categoryId là ObjectId
       const subcategoryData = {
         ...createSubcategoryDto,
-        categoryId: categoryObjectId // Đảm bảo categoryId là ObjectId
+        categoryId: categoryObjectId, // Đảm bảo categoryId là ObjectId
+        isActive: createSubcategoryDto.isActive ?? true, // Set default true nếu undefined
       };
 
       const newSubcategory = this.subcategoryRepository.create(subcategoryData);
@@ -76,13 +77,27 @@ export class SubcategoryService {
   }
 
   async findByCategoryId(categoryId: string): Promise<Subcategory[]> {
-    const categoryObjectId = new MongoObjectId(categoryId);
-    return this.subcategoryRepository.find({
-      where: { 
-        categoryId: categoryObjectId, 
-        isActive: true 
-      }
-    });
+    try {
+      console.log('Finding subcategories for categoryId:', categoryId);
+      
+      const categoryObjectId = new MongoObjectId(categoryId);
+      console.log('Converted to ObjectId:', categoryObjectId);
+      
+      const subcategories = await this.subcategoryRepository.find({
+        where: { 
+          categoryId: categoryObjectId, 
+          isActive: true 
+        }
+      });
+      
+      console.log('Found subcategories:', subcategories.length);
+      console.log('Subcategories data:', subcategories);
+      
+      return subcategories;
+    } catch (error) {
+      console.error('Error in findByCategoryId:', error);
+      throw new BadRequestException(`Lỗi tìm danh mục con: ${error.message}`);
+    }
   }
 
   async findOne(id: string): Promise<Subcategory> {
@@ -98,6 +113,7 @@ export class SubcategoryService {
     return subcategory;
   }
 
+  
   // async update(id: string, updateSubcategoryDto: UpdateSubcategoryDto): Promise<Subcategory> {
   //   const objectId = new MongoObjectId(id);
     

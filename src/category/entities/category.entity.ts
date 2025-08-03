@@ -2,8 +2,13 @@ import { Entity, ObjectIdColumn, Column, CreateDateColumn, UpdateDateColumn, Obj
 
 @Entity('categories')
 export class Category {
+
     @ObjectIdColumn()
-    id: ObjectId;
+    _id: ObjectId;
+
+    @Column({ default: true })
+    isActive: boolean;
+
 
     @Column({ unique: true })
     name: string;

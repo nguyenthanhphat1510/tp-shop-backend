@@ -3,7 +3,7 @@ import { Entity, ObjectIdColumn, Column, CreateDateColumn, UpdateDateColumn, Obj
 @Entity('products')
 export class Product {
     @ObjectIdColumn()
-    id: ObjectId;
+    _id: ObjectId;
 
     @Column({ unique: true })
     name: string;
@@ -14,11 +14,12 @@ export class Product {
     @Column()
     price: number;
 
-    @Column() // URL ảnh từ Cloudinary
-    imageUrl: string;
+    // Sửa lại thành mảng string
+    @Column({ type: 'array', default: [] })
+    imageUrls: string[]; // <-- Mảng URL ảnh
 
-    @Column({ nullable: true }) // Public ID của ảnh trên Cloudinary để có thể xóa
-    imagePublicId: string;
+    @Column({ type: 'array', default: [] })
+    imagePublicIds: string[]; // <-- Mảng publicId ảnh trên Cloudinary
 
     @Column('objectid')
     categoryId: ObjectId;

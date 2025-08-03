@@ -3,8 +3,8 @@ import { Entity, ObjectIdColumn, Column, CreateDateColumn, UpdateDateColumn, Obj
 @Entity('subcategories')
 export class Subcategory {
     @ObjectIdColumn()
-    id: ObjectId;
-
+    _id: ObjectId;
+    
     @Column({ unique: true })
     name: string;
 
@@ -13,9 +13,6 @@ export class Subcategory {
 
     @Column({ default: true })
     isActive: boolean;
-
-    @Column({ nullable: true })
-    description: string;
 
     @CreateDateColumn()
     createdAt: Date;
