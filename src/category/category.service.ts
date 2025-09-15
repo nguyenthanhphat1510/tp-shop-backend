@@ -28,7 +28,10 @@ export class CategoryService {
       }
 
       // Tạo category mới
-      const newCategory = this.categoryRepository.create(createCategoryDto);
+      const newCategory = this.categoryRepository.create({
+        ...createCategoryDto,
+        isActive: createCategoryDto.isActive !== undefined ? createCategoryDto.isActive : true,
+      });
       return this.categoryRepository.save(newCategory);
     } catch (error) {
       if (error instanceof BadRequestException) {
@@ -39,8 +42,9 @@ export class CategoryService {
   }
 
   async findAll(): Promise<Category[]> {
+    // ✅ Bỏ filter isActive, trả về tất cả categories
     return this.categoryRepository.find({
-      where: { isActive: true }
+      order: { createdAt: 'DESC' }
     });
   }
 
@@ -50,6 +54,8 @@ export class CategoryService {
     }
 
     const objectId = new ObjectId(id);
+    
+    // ✅ Bỏ filter isActive, tìm category bất kể trạng thái
     const category = await this.categoryRepository.findOne({
       where: { _id: objectId }
     });

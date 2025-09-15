@@ -43,7 +43,7 @@ export class CreateProductDto {
     @Transform(({ value }) => {
         if (typeof value === 'boolean') return value;
         if (typeof value === 'string') return value === 'true';
-        return undefined;
+        return true;
     })
     isActive?: boolean;
 }

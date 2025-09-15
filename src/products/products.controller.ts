@@ -8,7 +8,8 @@ import {
   Delete, 
   Put,
   UseInterceptors, 
-  UploadedFiles 
+  UploadedFiles, 
+  Query
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
@@ -30,6 +31,13 @@ export class ProductsController {
       throw error;
     }
   }
+
+  
+  @Get('filter-price')
+async filterByPrice(@Query('priceRangeId') priceRangeId: string) {
+  return this.productsService.findByPriceRange(priceRangeId);
+}
+
 
   // GET /products/:id - Lấy sản phẩm theo ID
   @Get(':id')
@@ -88,7 +96,7 @@ export class ProductsController {
 
   // POST /products - Tạo sản phẩm mới
   @Post()
-  @UseInterceptors(FilesInterceptor('files', 10))
+  @UseInterceptors(FilesInterceptor('files', 5))
   async create(
     @Body() createProductDto: CreateProductDto,
     @UploadedFiles() files: Express.Multer.File[]
@@ -109,7 +117,7 @@ export class ProductsController {
 
   // ✅ PUT /products/:id - Full update sản phẩm
   @Put(':id')
-  @UseInterceptors(FilesInterceptor('files', 10))
+  @UseInterceptors(FilesInterceptor('files', 5))
   async update(
     @Param('id') id: string,
     @Body() updateProductDto: CreateProductDto,
@@ -155,4 +163,11 @@ export class ProductsController {
       throw error;
     }
   }
+  
+  // ✅ Tìm sản phẩm theo category ID
+  @Get('category/:categoryId')
+  async findByCategory(@Param('categoryId') categoryId: string) {
+    return this.productsService.findByCategory(categoryId);
+  }
+
 }

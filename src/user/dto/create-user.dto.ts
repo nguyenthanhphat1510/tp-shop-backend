@@ -5,16 +5,34 @@ export class CreateUserDto {
     @IsNotEmpty()
     email: string;
 
+    @IsOptional() // FIX: Password optional và có thể null
     @IsString()
-    @IsNotEmpty()
-    @MinLength(6)
-    password: string;
+    password?: string | null; // FIX: Cho phép null
 
-    @IsString()
     @IsOptional()
+    @IsString()
     fullName?: string;
 
-    @IsBoolean()
     @IsOptional()
+    @IsString()
+    role?: string;
+
+    @IsOptional()
+    @IsBoolean()
     isActive?: boolean;
+
+    @IsOptional() // THÊM: Google fields
+    @IsString()
+    googleId?: string;
+
+    @IsOptional()
+    @IsString()
+    avatar?: string;
+
+    @IsOptional()
+    @IsString()
+    lastLoginMethod?: string;
+
+    @IsOptional()
+    lastLoginAt?: Date;
 }

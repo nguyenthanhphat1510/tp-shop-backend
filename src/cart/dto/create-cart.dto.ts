@@ -1,13 +1,21 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateCartDto {
     @IsString()
-    @IsNotEmpty()
     productId: string;
 
     @IsNumber()
-    @IsOptional()
     @Min(1)
-    @Max(50) // Sửa thành 50 để khớp với logic service
-    quantity?: number = 1;
+    @Max(3)
+    @IsOptional()
+    @Transform(({ value }) => {
+        // Ép kiểu từ string sang number
+        if (typeof value === 'string') {
+            const num = parseInt(value, 10);
+            return isNaN(num) ? 1 : num;
+        }
+        return value || 1;
+    })
+    quantity?: number;
 }

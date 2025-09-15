@@ -1,50 +1,52 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../user/user.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-    constructor(
-        private usersService: UsersService,
-        private configService: ConfigService,
-    ) {
-        const jwtSecret = configService.get<string>('JWT_SECRET');
-        console.log('JWT_SECRET in strategy:', jwtSecret); // Debug log
-
+    constructor(private usersService: UsersService) {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: jwtSecret || 'TpShop_S3cur3_K3y_8a47f2c9d6e0b5a1_$!%&*()_XyZ123', // Fallback
+            secretOrKey: process.env.JWT_SECRET || 'TpShop_S3cur3_K3y_8a47f2c9d6e0b5a1_$!%&*()_XyZ123',
         });
     }
 
     async validate(payload: any) {
         try {
             console.log('JWT Payload received:', payload);
-
-            const user = await this.usersService.findOne(payload.sub);
+            
+            // FIX: Thử tìm user bằng email trước
+            let user = await this.usersService.findByEmail(payload.email);
+            
             if (!user) {
-                console.log('User not found for ID:', payload.sub);
+                // FIX: Nếu không tìm thấy bằng email, thử bằng ID
+                console.log('👤 User not found by email, trying by ID...');
+                try {
+                    user = await this.usersService.findOne(payload.id || payload.sub);
+                } catch (idError) {
+                    console.log('❌ User not found by ID either:', idError.message);
+                }
+            }
+
+            if (!user) {
+                console.log('❌ JWT validation failed: User not found');
                 throw new UnauthorizedException('User không tồn tại');
             }
 
-            console.log('User found:', user.email);
-
+            console.log('✅ JWT validation successful:', user.email);
+            
+            // FIX: Trả về user data đầy đủ
             return {
-                id: user.id,
+                id: user._id.toString(),
                 email: user.email,
+                role: user.role,
                 fullName: user.fullName,
+                avatar: user.avatar,
             };
-
         } catch (error) {
             console.error('JWT validation error:', error);
-
-            if (error instanceof UnauthorizedException) {
-                throw error;
-            }
-
             throw new UnauthorizedException('Token không hợp lệ');
         }
     }

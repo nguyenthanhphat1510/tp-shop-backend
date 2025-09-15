@@ -11,11 +11,10 @@ export class OrderController {
     constructor(private readonly orderService: OrderService) { }
 
     // 🆕 Tạo đơn hàng mới
-    // @UseGuards(JwtAuthGuard)
-    @UseGuards(JwtAuthGuard) // Thêm dòng này!
+    @UseGuards(JwtAuthGuard)
     @Post()
     async create(@Body() createOrderDto: CreateOrderDto, @Request() req) {
-        const userId = req.user?.id; // hoặc req.user?.userId tùy JWT của bạn
+        const userId = req.user?.id;
         if (!userId) {
             return {
                 success: false,
@@ -40,7 +39,7 @@ export class OrderController {
         }
     }
 
-    // 📋 Lấy danh sách đơn hàng
+    // 📋 Lấy danh sách đơn hàng (CÓ PHÂN QUYỀN)
     @UseGuards(JwtAuthGuard)
     @Get()
     async findAll(
@@ -48,9 +47,21 @@ export class OrderController {
         @Query('all') all?: string
     ) {
         try {
+            console.log('🔍 JWT User payload:', req.user);
+            
             const isAdmin = req.user.role === 'admin';
-            const userId = isAdmin && all === 'true' ? undefined : (req.user.sub || req.user.userId);
-
+            const userId = isAdmin && all === 'true' ? undefined : req.user.id;
+            
+            console.log('🔍 Getting orders for userId:', userId);
+            
+            if (!userId && !isAdmin) {
+                return {
+                    success: false,
+                    message: 'Unauthorized - User ID not found',
+                    data: null
+                };
+            }
+            
             const orders = await this.orderService.findAll(userId);
 
             return {
@@ -59,6 +70,7 @@ export class OrderController {
                 data: orders
             };
         } catch (error) {
+            console.error('❌ Error in findAll orders:', error);
             return {
                 success: false,
                 message: error.message || 'Lấy danh sách đơn hàng thất bại',
@@ -67,7 +79,31 @@ export class OrderController {
         }
     }
 
-    // 🔍 Lấy chi tiết đơn hàng
+    // ✅ API ADMIN - Lấy tất cả đơn hàng KHÔNG CẦN PHÂN QUYỀN
+    @Get('admin/all')
+    async findAllForAdmin() {
+        try {
+            console.log('🔍 Getting all orders for admin without authentication');
+            
+            // ✅ Lấy tất cả orders không cần userId
+            const orders = await this.orderService.findAll();
+
+            return {
+                success: true,
+                message: 'Lấy danh sách đơn hàng thành công',
+                data: orders
+            };
+        } catch (error) {
+            console.error('❌ Error in findAllForAdmin orders:', error);
+            return {
+                success: false,
+                message: error.message || 'Lấy danh sách đơn hàng thất bại',
+                data: null
+            };
+        }
+    }
+
+    // 🔍 Lấy chi tiết đơn hàng (CÓ PHÂN QUYỀN)
     @UseGuards(JwtAuthGuard)
     @Get(':id')
     async findOne(@Param('id') id: string, @Request() req) {
@@ -91,10 +127,31 @@ export class OrderController {
         }
     }
 
-    // ✏️ Cập nhật đơn hàng (Admin only)
-    // @UseGuards(JwtAuthGuard, RolesGuard)
-    // @Roles('admin')
-    @UseGuards(JwtAuthGuard)
+    // ✅ API ADMIN - Lấy chi tiết đơn hàng KHÔNG CẦN PHÂN QUYỀN
+    @Get('admin/:id')
+    async findOneForAdmin(@Param('id') id: string) {
+        try {
+            console.log('🔍 Getting order details for admin:', id);
+            
+            // ✅ Lấy chi tiết order không cần userId
+            const order = await this.orderService.findOneWithItems(id);
+
+            return {
+                success: true,
+                message: 'Lấy chi tiết đơn hàng thành công',
+                data: order
+            };
+        } catch (error) {
+            console.error('❌ Error in findOneForAdmin:', error);
+            return {
+                success: false,
+                message: error.message || 'Lấy chi tiết đơn hàng thất bại',
+                data: null
+            };
+        }
+    }
+
+    // ✏️ Cập nhật đơn hàng (CÓ PHÂN QUYỀN)
     @Patch(':id')
     async update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
         try {
@@ -114,7 +171,29 @@ export class OrderController {
         }
     }
 
-    // ❌ Hủy đơn hàng
+    // ✅ API ADMIN - Cập nhật đơn hàng KHÔNG CẦN PHÂN QUYỀN
+    @Patch('admin/:id')
+    async updateForAdmin(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
+        try {
+            console.log('🔄 Admin updating order:', id, updateOrderDto);
+            const order = await this.orderService.update(id, updateOrderDto);
+
+            return {
+                success: true,
+                message: 'Cập nhật đơn hàng thành công',
+                data: order
+            };
+        } catch (error) {
+            console.error('❌ Error in updateForAdmin:', error);
+            return {
+                success: false,
+                message: error.message || 'Cập nhật đơn hàng thất bại',
+                data: null
+            };
+        }
+    }
+
+    // ❌ Hủy đơn hàng (CÓ PHÂN QUYỀN)
     @UseGuards(JwtAuthGuard)
     @Patch(':id/cancel')
     async cancel(
@@ -132,6 +211,31 @@ export class OrderController {
                 data: order
             };
         } catch (error) {
+            return {
+                success: false,
+                message: error.message || 'Hủy đơn hàng thất bại',
+                data: null
+            };
+        }
+    }
+
+    // ✅ API ADMIN - Hủy đơn hàng KHÔNG CẦN PHÂN QUYỀN
+    @Patch('admin/:id/cancel')
+    async cancelForAdmin(
+        @Param('id') id: string,
+        @Body('reason') reason?: string
+    ) {
+        try {
+            console.log('🔄 Admin cancelling order:', id, 'reason:', reason);
+            const order = await this.orderService.cancel(id, reason || 'Hủy bởi admin');
+
+            return {
+                success: true,
+                message: 'Hủy đơn hàng thành công',
+                data: order
+            };
+        } catch (error) {
+            console.error('❌ Error in cancelForAdmin:', error);
             return {
                 success: false,
                 message: error.message || 'Hủy đơn hàng thất bại',

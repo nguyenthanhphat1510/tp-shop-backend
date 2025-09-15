@@ -1,15 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Put, Query } from '@nestjs/common';
 import { SubcategoryService } from './subcategory.service';
 import { CreateSubcategoryDto } from './dto/create-subcategory.dto';
 import { UpdateSubcategoryDto } from './dto/update-subcategory.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('subcategories')
 export class SubcategoryController {
   constructor(private readonly subcategoryService: SubcategoryService) {}
 
   @Post()
-  // @UseGuards(JwtAuthGuard) // Bảo vệ API, yêu cầu xác thực
   create(@Body() createSubcategoryDto: CreateSubcategoryDto) {
     return this.subcategoryService.create(createSubcategoryDto);
   }
@@ -19,10 +17,8 @@ export class SubcategoryController {
     return this.subcategoryService.findAll();
   }
 
-  // ✅ Thêm endpoint để lấy subcategories theo categoryId
   @Get('category/:categoryId')
   findByCategoryId(@Param('categoryId') categoryId: string) {
-    console.log('Finding subcategories for category:', categoryId);
     return this.subcategoryService.findByCategoryId(categoryId);
   }
 
@@ -31,15 +27,34 @@ export class SubcategoryController {
     return this.subcategoryService.findOne(id);
   }
 
-  // @Patch(':id')
-  // update(@Param('id') id: string, @Body() updateSubcategoryDto: UpdateSubcategoryDto) {
-  //   return this.subcategoryService.update(id, updateSubcategoryDto);
-  // }
+  @Put(':id')
+  update(@Param('id') id: string, @Body() updateSubcategoryDto: UpdateSubcategoryDto) {
+    return this.subcategoryService.update(id, updateSubcategoryDto);
+  }
 
-  // @Delete(':id')
-  // remove(@Param('id') id: string) {
-  //   return this.subcategoryService.remove(id);
-  // }
+  // ✅ Toggle status API
+  @Patch(':id/toggle-status')
+  toggleStatus(@Param('id') id: string) {
+    return this.subcategoryService.toggleStatus(id);
+  }
+
+  // ✅ Soft delete API
+  @Patch(':id/soft-delete')
+  softDelete(@Param('id') id: string) {
+    return this.subcategoryService.softDelete(id);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.subcategoryService.remove(id);
+  }
+
+   // API lấy sản phẩm theo subcategory
+  @Get(':id/products')
+  getProductsBySubcategory(@Param('id') id: string) {
+    return this.subcategoryService.getProductsBySubcategory(id);
+  }
+
 }
 
 

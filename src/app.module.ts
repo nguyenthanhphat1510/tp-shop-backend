@@ -11,6 +11,9 @@ import { CategoryModule } from './category/category.module';
 import { SubcategoryModule } from './subcategory/subcategory.module';
 import { CartModule } from './cart/cart.module';
 import { OrderModule } from './order/order.module'; 
+import { GeminiModule } from './gemini/gemini.module';
+import { PaymentModule } from './payment/payment.module'; // Import the Gemini module
+import { ReportsModule } from './reports/reports.module'; // Import the Reports module
 
 
 
@@ -23,7 +26,7 @@ import { OrderModule } from './order/order.module';
     }),
     DatabaseModule,
     CartModule,
-
+    GeminiModule,
     // UsersModule,
     // AuthModule,
     ProductsModule,
@@ -32,6 +35,8 @@ import { OrderModule } from './order/order.module';
     CategoryModule,
     SubcategoryModule,
      OrderModule,
+     PaymentModule,
+     ReportsModule,
   ],
 })
 export class AppModule {}

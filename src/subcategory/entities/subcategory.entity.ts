@@ -1,22 +1,23 @@
-import { Entity, ObjectIdColumn, Column, CreateDateColumn, UpdateDateColumn, ObjectId } from 'typeorm';
+import { Entity, Column, ObjectIdColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { ObjectId } from 'mongodb';
 
 @Entity('subcategories')
 export class Subcategory {
-    @ObjectIdColumn()
-    _id: ObjectId;
-    
-    @Column({ unique: true })
-    name: string;
+  @ObjectIdColumn()
+  _id: ObjectId;
 
-    @Column('objectid')
-    categoryId: ObjectId; // ✅ Đổi từ string thành ObjectId
+  @Column()
+  name: string;
 
-    @Column({ default: true })
-    isActive: boolean;
+  @Column()
+  categoryId: ObjectId;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @Column({ default: true }) // ✅ Set default value
+  isActive: boolean;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

@@ -6,7 +6,7 @@ export class UpdateProductStatusDto {
   @Transform(({ value }) => {
     if (value === 'true') return true;
     if (value === 'false') return false;
-    return value;
+    return true;
   })
-  isActive: boolean;
+  isActive?: boolean;
 }

@@ -37,6 +37,11 @@ export class OrderService {
         throw new BadRequestException('Không có sản phẩm nào để đặt hàng');
       }
 
+         // Trừ số lượng sản phẩm trong kho
+    for (const item of orderItems) {
+      await this.productsService.decreaseStock(item.productId.toString(), item.quantity);
+    }
+
       // Tính toán giá
       const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
       const shippingFee = this.calculateShippingFee(createOrderDto.shippingInfo.city);
@@ -126,6 +131,15 @@ export class OrderService {
     const order = await this.findOne(id);
 
     Object.assign(order, updateOrderDto);
+
+    // Nếu trạng thái đơn hàng là DELIVERED thì trạng thái thanh toán phải là PAID
+    if (
+        updateOrderDto.status &&
+        updateOrderDto.status.toString().toUpperCase() === 'DELIVERED'
+    ) {
+        order.paymentStatus = PaymentStatus.PAID;
+    }
+
     order.updatedAt = new Date();
 
     return await this.orderRepository.save(order);
@@ -137,6 +151,7 @@ export class OrderService {
 
     if (!order.isCancellable) {
       throw new BadRequestException('Không thể hủy đơn hàng này');
+
     }
 
     order.status = OrderStatus.CANCELLED;
@@ -145,7 +160,6 @@ export class OrderService {
 
     return await this.orderRepository.save(order);
   }
-
   // ===== HELPER METHODS =====
 
   private async createOrderItemsFromCart(userId: string): Promise<OrderItem[]> {

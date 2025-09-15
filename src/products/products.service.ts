@@ -88,13 +88,18 @@ export class ProductsService {
       const productData = {
         name: createProductDto.name,
         description: createProductDto.description,
-        price: createProductDto.price,
+        price: Number(createProductDto.price),
         imageUrls,
         imagePublicIds,
         categoryId: categoryObjectId,
         subcategoryId: subcategoryObjectId,
         stock: createProductDto.stock || 0,
-        isActive: createProductDto.isActive ?? true
+        isActive:
+    typeof createProductDto.isActive === 'boolean'
+      ? createProductDto.isActive
+      : typeof createProductDto.isActive === 'string'
+        ? createProductDto.isActive === 'true'
+        : true // Mặc định là true nếu không truyền
       };
 
       const newProduct = this.productsRepository.create(productData);
@@ -515,4 +520,73 @@ export class ProductsService {
       throw new BadRequestException(`Lỗi cập nhật sản phẩm: ${error.message}`);
     }
   }
+  // ✅ Tìm sản phẩm theo category ID
+ // ✅ Tìm sản phẩm theo category ID
+async findByCategory(categoryId: string): Promise<Product[]> {
+  try {
+    if (!ObjectId.isValid(categoryId)) {
+      throw new BadRequestException(`ID danh mục không hợp lệ: ${categoryId}`);
+    }
+
+    const categoryObjectId = new ObjectId(categoryId);
+    
+    // Tìm category
+    const category = await this.categoryRepository.findOne({
+      where: { _id: categoryObjectId }
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Không tìm thấy danh mục với ID: ${categoryId}`);
+    }
+
+    // Tìm tất cả products trong category
+    const products = await this.productsRepository.find({
+      where: {
+        categoryId: categoryObjectId
+      },
+      order: { createdAt: 'DESC' }
+    });
+    
+    return products;
+    
+  } catch (error) {
+    if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      throw error;
+    }
+    
+    throw new BadRequestException(`Lỗi tìm kiếm sản phẩm theo danh mục: ${error.message}`);
+  }
+}
+
+async findByPriceRange(priceRangeId: string): Promise<Product[]> {
+  // Định nghĩa các khoảng giá
+  const priceRanges: Record<string, { min: number; max: number }> = {
+    'under-5m': { min: 0, max: 5000000 },
+    '5m-10m': { min: 5000000, max: 10000000 },
+    '10m-20m': { min: 10000000, max: 20000000 },
+    '20m-30m': { min: 20000000, max: 30000000 },
+    'above-30m': { min: 30000000, max: 999999999 }
+  };
+
+  const range = priceRanges[priceRangeId];
+  if (!range) {
+    throw new BadRequestException('Khoảng giá không hợp lệ');
+  }
+
+  return this.productsRepository.find({
+    where: {
+      price: { $gte: range.min, $lte: range.max },
+      isActive: true
+    },
+    order: { createdAt: 'DESC' }
+  });
+}
+
+async decreaseStock(productId: string, quantity: number): Promise<void> {
+  const product = await this.productsRepository.findOne({ where: { _id: new ObjectId(productId) } });
+  if (!product) throw new BadRequestException('Sản phẩm không tồn tại');
+  if (product.stock < quantity) throw new BadRequestException('Không đủ số lượng sản phẩm trong kho');
+  product.stock -= quantity;
+  await this.productsRepository.save(product);
+}
 }

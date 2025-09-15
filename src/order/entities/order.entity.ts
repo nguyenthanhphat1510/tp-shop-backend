@@ -58,7 +58,7 @@ export class Order {
 
   @Column({ default: 0 })
   shippingFee: number;          // Phí vận chuyển
-
+  
   @Column({ default: 0 })
   discount: number;             // Giảm giá
 

@@ -91,6 +91,7 @@ export class CartController {
 
     // ✅ Giảm số lượng theo productId
     @Put('decrease/:productId')
+    @UseGuards(AuthGuard('jwt')) // THÊM: Guard cho decrease
     async decreaseQuantity(
         @Param('productId') productId: string,
         @Request() req: any
@@ -104,7 +105,16 @@ export class CartController {
                 };
             }
 
-            const userId = req.user?.userId || req.user?.id || '507f1f77bcf86cd799439011';
+            // FIX: Chỉ sử dụng userId từ JWT token
+            const userId = req.user?.id;
+            if (!userId) {
+                return {
+                    success: false,
+                    message: 'Bạn chưa đăng nhập',
+                    data: null
+                };
+            }
+
             console.log('🔍 Decrease quantity:', { userId, productId });
 
             const result = await this.cartService.decreaseQuantity(userId, productId);
@@ -126,6 +136,7 @@ export class CartController {
 
     // ✅ Xóa sản phẩm theo productId
     @Delete('remove/:productId')
+    @UseGuards(AuthGuard('jwt')) // THÊM: Guard cho remove
     async removeFromCart(
         @Param('productId') productId: string,
         @Request() req: any
@@ -139,7 +150,16 @@ export class CartController {
                 };
             }
 
-            const userId = req.user?.userId || req.user?.id || '507f1f77bcf86cd799439011';
+            // FIX: Chỉ sử dụng userId từ JWT token
+            const userId = req.user?.id;
+            if (!userId) {
+                return {
+                    success: false,
+                    message: 'Bạn chưa đăng nhập',
+                    data: null
+                };
+            }
+
             console.log('🔍 Remove from cart:', { userId, productId });
 
             const result = await this.cartService.removeFromCart(userId, productId);
