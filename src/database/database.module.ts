@@ -13,10 +13,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         url: configService.get('MONGODB_URI'),
         useNewUrlParser: true,
         useUnifiedTopology: true,
-        synchronize: true, // Set to false in production
-        logging: true,
-        entities: ['dist/**/*.entity{.ts,.js}'],
+        synchronize: false, // ✅ MUST be false in production
+        logging: false,     // ✅ Disable logs for performance
+        entities: [__dirname + '/../**/*.entity{.ts,.js}'], // ✅ Correct path
         autoLoadEntities: true,
+        // ✅ Serverless optimizations
+        connectTimeout: 30000,
+        socketTimeout: 30000,
       }),
     }),
   ],
