@@ -1,24 +1,17 @@
-import 'reflect-metadata';
+import 'reflect-metadata'; // ✅ Thêm dòng này ở đầu tiên
 import { NestFactory } from '@nestjs/core';
+
+// Trong main.ts
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService);
-  console.log('JWT_SECRET:', configService.get('JWT_SECRET'));
+    // Thêm tiền tố /api cho tất cả các routes
+    const configService = app.get(ConfigService);
+  console.log('JWT_SECRET:', configService.get('JWT_SECRET')); // Kiểm tra giá trị
   app.setGlobalPrefix('api');
-  app.enableCors({
-    origin: process.env.FRONTEND_URL || '*',
-    credentials: true,
-  });
-  
-  const port = process.env.PORT || 3000;
-  await app.listen(port, '0.0.0.0');
-  console.log(`Application is running on port ${port}`);
+  app.enableCors();
+  await app.listen(process.env.PORT ?? 3000);
 }
-
-// Chỉ chạy local development
-if (process.env.NODE_ENV !== 'production') {
-  bootstrap();
-}
+bootstrap();
