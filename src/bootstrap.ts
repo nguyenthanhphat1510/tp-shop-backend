@@ -20,7 +20,7 @@ export async function createNestServer() {
 
     // ❗️ĐỪNG đặt global prefix 'api' trong Vercel
     // Vì tất cả request đã đi qua /api/index.ts. Nếu đặt nữa sẽ thành /api/api/...
-    if (!process.env.VERCEL) {
+    if (!process.env.NODE_ENV) {
         // chạy local mới cần prefix cho gọn
         app.setGlobalPrefix('api');
     }
