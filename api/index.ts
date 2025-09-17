@@ -2,7 +2,15 @@
 import { createNestServer } from '../src/bootstrap';
 
 let cached: any;
+
 export default async function handler(req: any, res: any) {
-    if (!cached) cached = await createNestServer();
-    return cached(req, res); // Express app là 1 function (req,res)
+    console.log('🔍 Vercel handler called:', req.url, req.method);
+    
+    if (!cached) {
+        console.log('🚀 Creating NestJS server...');
+        cached = await createNestServer();
+        console.log('✅ NestJS server created');
+    }
+    
+    return cached(req, res);
 }
