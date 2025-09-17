@@ -1,18 +1,8 @@
+// vercel.json
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "maxLambdaSize": "50mb"
-      }
-    }
-  ],
+  "builds": [{ "src": "api/index.ts", "use": "@vercel/node", "config": { "maxLambdaSize": "50mb" } }],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "api/index.ts"
-    }
+    { "src": "/api/(.*)", "dest": "api/index.ts" }   // ✅ chỉ bắt /api/*
   ]
 }
