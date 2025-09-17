@@ -2,17 +2,11 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ExpressAdapter } from '@nestjs/platform-express';
-const express = require('express');             // ✅ Sử dụng require thay vì import
 import { ConfigService } from '@nestjs/config';
-import { INestApplication } from '@nestjs/common';
 
 export async function createNestServer() {
-    const server = express();                   
-    const app: INestApplication = await NestFactory.create(
-        AppModule,
-        new ExpressAdapter(server),
-    );
+    // ✅ Để NestJS tự tạo Express instance
+    const app = await NestFactory.create(AppModule);
 
     const config = app.get(ConfigService);
     app.enableCors({
@@ -25,5 +19,7 @@ export async function createNestServer() {
     }
 
     await app.init();
-    return server;                              
+    
+    // ✅ Trả về Express instance từ HTTP adapter
+    return app.getHttpAdapter().getInstance();
 }
