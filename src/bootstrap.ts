@@ -3,7 +3,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ExpressAdapter } from '@nestjs/platform-express';
-import express from 'express';                  // ✅ Thay đổi thành default import
+const express = require('express');             // ✅ Sử dụng require thay vì import
 import { ConfigService } from '@nestjs/config';
 import { INestApplication } from '@nestjs/common';
 
