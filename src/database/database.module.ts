@@ -11,12 +11,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       useFactory: (configService: ConfigService) => ({
         type: 'mongodb',
         url: configService.get('MONGODB_URI'),
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        synchronize: true, // Set to false in production
-        logging: true,
-        entities: ['dist/**/*.entity{.ts,.js}'],
+        synchronize: false,
+        logging: false,
+        entities: ['dist/**/*.entity.js'],
         autoLoadEntities: true,
+        connectTimeout: 10000,
+        socketTimeout: 10000,
+        serverSelectionTimeoutMS: 5000,
       }),
     }),
   ],
