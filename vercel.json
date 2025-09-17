@@ -5,5 +5,15 @@
       "src": "api/index.ts",
       "use": "@vercel/node"
     }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index?path=$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index"
+    }
   ]
 }
