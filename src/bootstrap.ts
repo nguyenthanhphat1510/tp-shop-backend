@@ -3,12 +3,12 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ExpressAdapter } from '@nestjs/platform-express';
-import * as express from 'express';            // ✅ Sử dụng namespace import
+import express from 'express';                  // ✅ Thay đổi thành default import
 import { ConfigService } from '@nestjs/config';
 import { INestApplication } from '@nestjs/common';
 
 export async function createNestServer() {
-    const server = express();                   // ✅ Bây giờ sẽ work
+    const server = express();                   
     const app: INestApplication = await NestFactory.create(
         AppModule,
         new ExpressAdapter(server),
@@ -25,5 +25,5 @@ export async function createNestServer() {
     }
 
     await app.init();
-    return server;                              // Express app (req, res) handler
+    return server;                              
 }
