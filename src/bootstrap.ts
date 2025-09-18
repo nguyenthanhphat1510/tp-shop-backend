@@ -5,7 +5,7 @@ import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 
 export async function createNestServer() {
-    // ✅ Để NestJS tự tạo Express instance
+    console.log('🚀 Creating NestJS server...');
     const app = await NestFactory.create(AppModule);
 
     const config = app.get(ConfigService);
@@ -14,12 +14,26 @@ export async function createNestServer() {
         credentials: true,
     });
 
+    // ✅ KHÔNG set global prefix trên Vercel
     if (!process.env.VERCEL) {
         app.setGlobalPrefix('api');
+        console.log('✅ Local: Global prefix "api" set');
+    } else {
+        console.log('✅ Vercel: No global prefix');
     }
 
     await app.init();
+    console.log('✅ NestJS server initialized');
     
-    // ✅ Trả về Express instance từ HTTP adapter
-    return app.getHttpAdapter().getInstance();
+    const expressApp = app.getHttpAdapter().getInstance();
+    
+    // ✅ Debug middleware cho Vercel
+    if (process.env.VERCEL) {
+        expressApp.use((req: any, res: any, next: any) => {
+            console.log(`📍 NestJS received: ${req.method} ${req.url}`);
+            next();
+        });
+    }
+    
+    return expressApp;
 }
