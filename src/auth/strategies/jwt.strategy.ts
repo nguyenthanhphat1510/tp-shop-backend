@@ -16,7 +16,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     async validate(payload: any) {
         try {
             console.log('JWT Payload received:', payload);
-            
             // FIX: Thử tìm user bằng email trước
             let user = await this.usersService.findByEmail(payload.email);
             

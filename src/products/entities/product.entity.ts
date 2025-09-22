@@ -11,15 +11,6 @@ export class Product {
     @Column()
     description: string;
 
-    @Column()
-    price: number;
-
-    // Sửa lại thành mảng string
-    @Column({ type: 'array', default: [] })
-    imageUrls: string[]; // <-- Mảng URL ảnh
-
-    @Column({ type: 'array', default: [] })
-    imagePublicIds: string[]; // <-- Mảng publicId ảnh trên Cloudinary
 
     @Column('objectid')
     categoryId: ObjectId;
