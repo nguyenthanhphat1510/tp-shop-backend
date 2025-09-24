@@ -11,15 +11,11 @@ export class Product {
     @Column()
     description: string;
 
-
     @Column('objectid')
     categoryId: ObjectId;
 
     @Column('objectid')
     subcategoryId: ObjectId;
-
-    @Column({ default: 0 })
-    stock: number;
 
     @Column({ default: true })
     isActive: boolean;

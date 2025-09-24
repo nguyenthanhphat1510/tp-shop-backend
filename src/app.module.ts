@@ -10,10 +10,10 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { CategoryModule } from './category/category.module';
 import { SubcategoryModule } from './subcategory/subcategory.module';
-import { CartModule } from './cart/cart.module';
-import { OrderModule } from './order/order.module'; 
+// import { CartModule } from './cart/cart.module';
+// import { OrderModule } from './order/order.module'; 
 import { GeminiModule } from './gemini/gemini.module';
-import { PaymentModule } from './payment/payment.module'; // Import the Gemini module
+// import { PaymentModule } from './payment/payment.module'; // Import the Gemini module
 import { ReportsModule } from './reports/reports.module'; // Import the Reports module
 
 
@@ -26,7 +26,7 @@ import { ReportsModule } from './reports/reports.module'; // Import the Reports 
       envFilePath: '.env',
     }),
     DatabaseModule,
-    CartModule,
+    // CartModule,
     GeminiModule,
     // UsersModule,
     // AuthModule,
@@ -35,8 +35,8 @@ import { ReportsModule } from './reports/reports.module'; // Import the Reports 
     UserModule,
     CategoryModule,
     SubcategoryModule,
-     OrderModule,
-     PaymentModule,
+    //  OrderModule,
+    //  PaymentModule,
      ReportsModule,
   ],
   controllers: [AppController],  // ✅ Thêm dòng này

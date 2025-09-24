@@ -1,26 +1,28 @@
 // File: src/products/dto/create-variant.dto.ts
-import { IsString, IsNumber, IsOptional, IsArray, IsBoolean, Min } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsBoolean, IsOptional } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateVariantDto {
-  @IsString()
-  storage: string; // "128GB"
+    @IsString()
+    @IsNotEmpty({ message: 'Dung lượng không được để trống' })
+    storage: string; // "128GB", "256GB", "512GB"
 
-  @IsString()
-  color: string; // "Đen"
+    @IsString()
+    @IsNotEmpty({ message: 'Màu sắc không được để trống' })
+    color: string; // "Đen", "Trắng", "Xanh Dương"
 
-  @IsNumber()
-  @Min(0)
-  price: number; // 22000000
+    @Transform(({ value }) => Number(value))
+    @IsNumber({}, { message: 'Giá phải là số' })
+    @IsNotEmpty({ message: 'Giá không được để trống' })
+    price: number;
 
-  @IsNumber()
-  @Min(0)
-  stock: number; // 50
+    @Transform(({ value }) => Number(value))
+    @IsNumber({}, { message: 'Số lượng phải là số' })
+    @IsNotEmpty({ message: 'Số lượng không được để trống' })
+    stock: number;
 
-  @IsOptional()
-  @IsArray()
-  imageUrls?: string[]; // Ảnh riêng cho variant
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean; // Mặc định true
+    @Transform(({ value }) => value === 'true' || value === true)
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean = true;
 }
