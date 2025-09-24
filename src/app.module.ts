@@ -15,12 +15,18 @@ import { SubcategoryModule } from './subcategory/subcategory.module';
 import { GeminiModule } from './gemini/gemini.module';
 // import { PaymentModule } from './payment/payment.module'; // Import the Gemini module
 import { ReportsModule } from './reports/reports.module'; // Import the Reports module
-
+import { MulterModule } from '@nestjs/platform-express';
 
 
 
 @Module({
   imports: [
+    // ✅ Thêm global multer nếu chưa có
+    MulterModule.register({
+      dest: './uploads',
+      limits: { fileSize: 10 * 1024 * 1024 }
+    }),
+    
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',

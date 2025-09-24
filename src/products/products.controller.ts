@@ -28,20 +28,47 @@ export class ProductsController {
     { name: 'variant_2_images', maxCount: 10 },
     { name: 'variant_3_images', maxCount: 10 },
     { name: 'variant_4_images', maxCount: 10 },
-    { name: 'variant_5_images', maxCount: 10 },
-    { name: 'variant_6_images', maxCount: 10 },
-    { name: 'variant_7_images', maxCount: 10 },
-    { name: 'variant_8_images', maxCount: 10 },
-    { name: 'variant_9_images', maxCount: 10 }, // Hỗ trợ tối đa 10 variants
   ]))
   async create(
-    @Body() createProductDto: CreateProductWithVariantsDto, // ✅ Dùng DTO mới
-    @UploadedFiles() files: { [fieldname: string]: Express.Multer.File[] } // ✅ Format đúng
+    @Body() body: any, // ✅ Thay đổi thành any để parse thủ công
+    @UploadedFiles() files: { [fieldname: string]: Express.Multer.File[] }
   ) {
     try {
       console.log('📝 POST /products - Tạo sản phẩm với variants');
-      console.log('📋 Product data:', createProductDto);
-      console.log('📸 Files received:', Object.keys(files || {}));
+      console.log('📋 Raw body:', JSON.stringify(body, null, 2));
+      
+      // ✅ VALIDATION & PARSING
+      if (!body.name || !body.description || !body.categoryId || !body.variants) {
+        throw new Error('Thiếu thông tin bắt buộc: name, description, categoryId, variants');
+      }
+      
+      // Parse variants từ JSON string
+      let parsedVariants = [];
+      try {
+        parsedVariants = typeof body.variants === 'string' 
+          ? JSON.parse(body.variants) 
+          : body.variants;
+        
+        if (!Array.isArray(parsedVariants) || parsedVariants.length === 0) {
+          throw new Error('Variants phải là array không rỗng');
+        }
+        
+        console.log('✅ Parsed variants:', parsedVariants);
+      } catch (error) {
+        throw new Error('Lỗi parse variants JSON: ' + error.message);
+      }
+      
+      // ✅ TẠO DTO ĐÚNG FORMAT
+      const createProductDto: CreateProductWithVariantsDto = {
+        name: body.name.toString().trim(),
+        description: body.description.toString().trim(),
+        categoryId: body.categoryId.toString().trim(),
+        subcategoryId: (body.subcategoryId || body.categoryId).toString().trim(),
+        variants: parsedVariants
+      };
+      
+      console.log('📋 Final DTO:', JSON.stringify(createProductDto, null, 2));
+      console.log('📸 Files keys:', files ? Object.keys(files) : 'no files');
 
       const result = await this.productsService.create(createProductDto, files);
 
@@ -51,8 +78,15 @@ export class ProductsController {
         data: result
       };
     } catch (error) {
-      console.error('❌ Error in create product controller:', error);
-      throw error;
+      console.error('❌ CONTROLLER ERROR:', error.message);
+      console.error('❌ STACK:', error.stack);
+      
+      return {
+        success: false,
+        message: `❌ Lỗi tạo sản phẩm: ${error.message}`,
+        error: "Bad Request",
+        statusCode: 400
+      };
     }
   }
 
@@ -108,12 +142,8 @@ export class ProductsController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
-      console.log(`🔍 GET /products/${id}`);
-      const product = await this.productsService.findOne(id);
-      return {
-        success: true,
-        data: product
-      };
+      console.log('📋 GET /products/:id', id);
+      return await this.productsService.findOne(id);
     } catch (error) {
       console.error('❌ Error in findOne controller:', error);
       throw error;
@@ -161,5 +191,26 @@ export class ProductsController {
 
   // ❌ TẠM THỜI BỎ UPDATE VÀ PARTIAL UPDATE - SẼ IMPLEMENT SAU
   // @Put(':id')
-  // @Patch(':id')
+  @Put(':id')
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'variant_0_images', maxCount: 10 },
+    { name: 'variant_1_images', maxCount: 10 },
+    { name: 'variant_2_images', maxCount: 10 },
+    { name: 'variant_3_images', maxCount: 10 },
+    { name: 'variant_4_images', maxCount: 10 },
+    // Add more as needed
+  ]))
+  async update(
+    @Param('id') id: string,
+    @Body() updateProductDto: UpdateProductDto,
+    @UploadedFiles() files?: { [fieldname: string]: Express.Multer.File[] }
+  ) {
+    try {
+      console.log('🔄 PUT /products/:id', id, updateProductDto);
+      return await this.productsService.update(id, updateProductDto, files);
+    } catch (error) {
+      console.error('❌ Error in update controller:', error);
+      throw error;
+    }
+  }
 }

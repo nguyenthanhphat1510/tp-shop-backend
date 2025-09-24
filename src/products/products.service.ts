@@ -11,7 +11,7 @@ import { Subcategory } from '../subcategory/entities/subcategory.entity';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @Injectable()
-export class ProductsService {F
+export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private productsRepository: MongoRepository<Product>,
@@ -22,7 +22,7 @@ export class ProductsService {F
     @InjectRepository(Subcategory)
     private subcategoryRepository: MongoRepository<Subcategory>,
     private cloudinaryService: CloudinaryService,
-  ) {}
+  ) { }
 
   /**
    * 🆕 TẠO SẢN PHẨM VỚI VARIANTS
@@ -35,7 +35,7 @@ export class ProductsService {F
    * @returns Promise<{ product: Product; variants: ProductVariant[] }>
    */
   async create(
-    createProductDto: CreateProductWithVariantsDto, 
+    createProductDto: CreateProductWithVariantsDto,
     files?: { [fieldname: string]: Express.Multer.File[] }
   ): Promise<{ product: Product; variants: ProductVariant[] }> {
     try {
@@ -74,7 +74,7 @@ export class ProductsService {F
       const existingProduct = await this.productsRepository.findOne({
         where: { name: createProductDto.name }
       });
-      
+
       // Ném lỗi nếu tên đã được sử dụng
       if (existingProduct) {
         throw new BadRequestException(`❌ Sản phẩm với tên "${createProductDto.name}" đã tồn tại`);
@@ -112,11 +112,11 @@ export class ProductsService {F
        * - iPhone 16 512GB Xanh: giá 28 triệu, stock 20
        */
       const createdVariants: ProductVariant[] = [];
-      
+
       // Duyệt qua từng variant trong danh sách
       for (let i = 0; i < createProductDto.variants.length; i++) {
         const variantDto = createProductDto.variants[i];
-        
+
         console.log(`🔄 Đang tạo variant ${i + 1}/${createProductDto.variants.length}:`, {
           storage: variantDto.storage,
           color: variantDto.color,
@@ -133,14 +133,14 @@ export class ProductsService {F
          * - "XIAOMI13PRO-512GB-XÁNHDƯƠNG"
          */
         const sku = `${createProductDto.name.toUpperCase().replace(/\s+/g, '')}-${variantDto.storage}-${variantDto.color.toUpperCase().replace(/\s+/g, '')}`;
-        
+
         console.log(`🏷️ Generated SKU: ${sku}`);
 
         // Kiểm tra SKU đã tồn tại chưa (SKU phải unique)
         const existingSku = await this.variantsRepository.findOne({
           where: { sku }
         });
-        
+
         if (existingSku) {
           throw new BadRequestException(`❌ SKU "${sku}" đã tồn tại. Variant này đã được tạo trước đó.`);
         }
@@ -156,23 +156,23 @@ export class ProductsService {F
          */
         let variantImageUrls: string[] = [];
         let variantImagePublicIds: string[] = [];
-        
+
         // Lấy files cho variant thứ i
         const variantFiles = files?.[`variant_${i}_images`];
-        
+
         if (variantFiles && variantFiles.length > 0) {
           console.log(`📸 Đang upload ${variantFiles.length} ảnh cho variant ${variantDto.color}`);
-          
+
           // Upload từng file lên Cloudinary
           for (const file of variantFiles) {
             const uploadResult = await this.cloudinaryService.uploadImage(
-              file, 
+              file,
               `tpshop/products/${savedProduct._id}/variants/${variantDto.color}` // Folder path
             );
             variantImageUrls.push(uploadResult.secure_url);     // URL để hiển thị
             variantImagePublicIds.push(uploadResult.public_id); // ID để xóa sau này
           }
-          
+
           console.log(`✅ Đã upload thành công ${variantImageUrls.length} ảnh`);
         } else {
           console.log(`ℹ️ Không có ảnh nào được upload cho variant ${variantDto.color}`);
@@ -213,44 +213,64 @@ export class ProductsService {F
       console.log(`   💰 Giá từ ${priceRange.min.toLocaleString()}đ đến ${priceRange.max.toLocaleString()}đ`);
 
       // Trả về kết quả
-      return { 
-        product: savedProduct, 
-        variants: createdVariants 
+      return {
+        product: savedProduct,
+        variants: createdVariants
       };
 
     } catch (error) {
       console.error('❌ LỖI KHI TẠO SẢN PHẨM:', error);
-      
+
       // Giữ nguyên lỗi validation và not found
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      
+
       // Wrap các lỗi khác
       throw new BadRequestException(`❌ Lỗi tạo sản phẩm: ${error.message}`);
     }
   }
 
   // ✅ Lấy tất cả sản phẩm với variants
-  async findAll(): Promise<Array<{ product: Product; variants: ProductVariant[] }>> {
+  // Cập nhật method findAll() để trả về structure phù hợp:
+
+  async findAll(): Promise<Product[]> {
     try {
       console.log('📋 Finding all products with variants');
-      
+
       const products = await this.productsRepository.find({
+        where: { isActive: true },
         order: { createdAt: 'DESC' }
       });
 
-      const result: Array<{ product: Product; variants: ProductVariant[] }> = [];
-      
+      const result: Product[] = [];
+
       for (const product of products) {
         const variants = await this.variantsRepository.find({
-          where: { productId: product._id },
-          order: { storage: 'ASC', color: 'ASC' } // Sắp xếp theo dung lượng và màu
+          where: { productId: product._id, isActive: true },
+          order: { price: 'ASC' } // ✅ Sắp xếp theo giá tăng dần
         });
-        result.push({ product, variants });
+
+        if (variants.length > 0) {
+          // ✅ FLAT STRUCTURE - Merge product + variants info
+          const productWithVariants = {
+            ...product,
+            variants: variants.map(v => ({
+              _id: v._id,
+              storage: v.storage,
+              color: v.color,
+              price: v.price,
+              stock: v.stock,
+              images: v.imageUrls, // ✅ Rename imageUrls thành images
+              isActive: v.isActive
+            }))
+          };
+
+          result.push(productWithVariants);
+        }
       }
 
-      console.log(`✅ Found ${products.length} products`);
+      console.log(`✅ Found ${result.length} products with variants`);
       return result;
 
     } catch (error) {
@@ -258,55 +278,17 @@ export class ProductsService {F
       throw new BadRequestException(`Lỗi lấy danh sách sản phẩm: ${error.message}`);
     }
   }
-
-  // ✅ Lấy 1 sản phẩm với variants
-  async findOne(id: string): Promise<{ product: Product; variants: ProductVariant[] }> {
-    try {
-      console.log('🔍 Finding product with variants, ID:', id);
-      
-      if (!ObjectId.isValid(id)) {
-        throw new BadRequestException(`ID sản phẩm không hợp lệ: ${id}`);
-      }
-
-      const objectId = new ObjectId(id);
-      
-      const [product, variants] = await Promise.all([
-        this.productsRepository.findOne({ where: { _id: objectId } }),
-        this.variantsRepository.find({ 
-          where: { productId: objectId },
-          order: { storage: 'ASC', color: 'ASC' }
-        })
-      ]);
-
-      if (!product) {
-        throw new NotFoundException(`Không tìm thấy sản phẩm với ID: ${id}`);
-      }
-
-      console.log(`✅ Found product "${product.name}" with ${variants.length} variants`);
-      return { product, variants };
-
-    } catch (error) {
-      console.error('❌ Error finding product:', error);
-      
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-      
-      throw new BadRequestException(`Lỗi tìm kiếm sản phẩm: ${error.message}`);
-    }
-  }
-
   // ✅ Toggle status product và tất cả variants
   async toggleStatus(id: string): Promise<{ product: Product; variants: ProductVariant[] }> {
     try {
       console.log(`🔄 Toggling product status: ID=${id}`);
-      
+
       if (!ObjectId.isValid(id)) {
         throw new BadRequestException(`ID sản phẩm không hợp lệ: ${id}`);
       }
 
       const objectId = new ObjectId(id);
-      
+
       const existingProduct = await this.productsRepository.findOne({
         where: { _id: objectId }
       });
@@ -340,11 +322,11 @@ export class ProductsService {F
 
     } catch (error) {
       console.error('❌ Error toggling product status:', error);
-      
+
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      
+
       throw new BadRequestException(`Lỗi thay đổi trạng thái sản phẩm: ${error.message}`);
     }
   }
@@ -353,13 +335,13 @@ export class ProductsService {F
   async softDelete(id: string): Promise<{ product: Product; variants: ProductVariant[] }> {
     try {
       console.log(`🗑️ Soft deleting product: ID=${id}`);
-      
+
       if (!ObjectId.isValid(id)) {
         throw new BadRequestException(`ID sản phẩm không hợp lệ: ${id}`);
       }
 
       const objectId = new ObjectId(id);
-      
+
       const existingProduct = await this.productsRepository.findOne({
         where: { _id: objectId }
       });
@@ -390,11 +372,11 @@ export class ProductsService {F
 
     } catch (error) {
       console.error('❌ Error soft deleting product:', error);
-      
+
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      
+
       throw new BadRequestException(`Lỗi xóa sản phẩm: ${error.message}`);
     }
   }
@@ -407,7 +389,7 @@ export class ProductsService {F
       }
 
       const categoryObjectId = new ObjectId(categoryId);
-      
+
       const category = await this.categoryRepository.findOne({
         where: { _id: categoryObjectId }
       });
@@ -422,7 +404,7 @@ export class ProductsService {F
       });
 
       const result: Array<{ product: Product; variants: ProductVariant[] }> = [];
-      
+
       for (const product of products) {
         const variants = await this.variantsRepository.find({
           where: { productId: product._id, isActive: true }
@@ -431,14 +413,14 @@ export class ProductsService {F
           result.push({ product, variants });
         }
       }
-      
+
       return result;
-      
+
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      
+
       throw new BadRequestException(`Lỗi tìm kiếm sản phẩm theo danh mục: ${error.message}`);
     }
   }
@@ -488,18 +470,18 @@ export class ProductsService {F
 
   // ✅ Giảm stock cho variant cụ thể (khi đặt hàng)
   async decreaseVariantStock(variantId: string, quantity: number): Promise<void> {
-    const variant = await this.variantsRepository.findOne({ 
-      where: { _id: new ObjectId(variantId) } 
+    const variant = await this.variantsRepository.findOne({
+      where: { _id: new ObjectId(variantId) }
     });
-    
+
     if (!variant) {
       throw new BadRequestException('Biến thể sản phẩm không tồn tại');
     }
-    
+
     if (variant.stock < quantity) {
       throw new BadRequestException(`Không đủ số lượng. Còn lại: ${variant.stock}`);
     }
-    
+
     variant.stock -= quantity;
     variant.sold += quantity;
     await this.variantsRepository.save(variant);
@@ -526,5 +508,328 @@ export class ProductsService {F
       totalStock,
       totalSold
     };
+  }
+
+  /**
+   * 🔄 CẬP NHẬT SẢN PHẨM VÀ VARIANTS
+   * 
+   * Cho phép:
+   * - Sửa thông tin sản phẩm (tên, mô tả, category)
+   * - Thêm variants mới
+   * - Cập nhật variants hiện có
+   * - Xóa variants cũ
+   * - Upload ảnh mới cho variants
+   */
+  async update(
+    id: string,
+    updateProductDto: UpdateProductDto,
+    files?: { [fieldname: string]: Express.Multer.File[] }
+  ): Promise<{ product: Product; variants: ProductVariant[] }> {
+    try {
+      console.log('🔄 Updating product:', id, updateProductDto);
+
+      // Validate product ID
+      if (!ObjectId.isValid(id)) {
+        throw new BadRequestException(`ID sản phẩm không hợp lệ: ${id}`);
+      }
+
+      const productObjectId = new ObjectId(id);
+
+      // Tìm sản phẩm hiện tại
+      const existingProduct = await this.productsRepository.findOne({
+        where: { _id: productObjectId }
+      });
+
+      if (!existingProduct) {
+        throw new NotFoundException(`Không tìm thấy sản phẩm với ID: ${id}`);
+      }
+
+      // 📍 BƯỚC 1: CẬP NHẬT THÔNG TIN SẢN PHẨM CHÍNH
+      const updateData: Partial<Product> = {
+        updatedAt: new Date()
+      };
+
+      if (updateProductDto.name) {
+        // Kiểm tra tên mới có bị trùng không (trừ chính nó)
+        const duplicateName = await this.productsRepository.findOne({
+          where: { 
+            name: updateProductDto.name,
+            _id: { $ne: productObjectId } // Exclude current product
+          }
+        });
+
+        if (duplicateName) {
+          throw new BadRequestException(`Tên sản phẩm "${updateProductDto.name}" đã được sử dụng`);
+        }
+
+        updateData.name = updateProductDto.name;
+      }
+
+      if (updateProductDto.description) {
+        updateData.description = updateProductDto.description;
+      }
+
+      // Validate và cập nhật category nếu có
+      if (updateProductDto.categoryId) {
+        const categoryId = new ObjectId(updateProductDto.categoryId);
+        const category = await this.categoryRepository.findOne({
+          where: { _id: categoryId }
+        });
+
+        if (!category) {
+          throw new NotFoundException(`Không tìm thấy danh mục với ID: ${updateProductDto.categoryId}`);
+        }
+
+        updateData.categoryId = categoryId;
+      }
+
+      // Validate và cập nhật subcategory nếu có
+      if (updateProductDto.subcategoryId) {
+        const subcategoryId = new ObjectId(updateProductDto.subcategoryId);
+        const subcategory = await this.subcategoryRepository.findOne({
+          where: { _id: subcategoryId }
+        });
+
+        if (!subcategory) {
+          throw new NotFoundException(`Không tìm thấy danh mục con với ID: ${updateProductDto.subcategoryId}`);
+        }
+
+        updateData.subcategoryId = subcategoryId;
+      }
+
+      // Cập nhật sản phẩm chính
+      await this.productsRepository.update({ _id: productObjectId }, updateData);
+      console.log('✅ Updated product basic info');
+
+      // 📍 BƯỚC 2: XỬ LÝ VARIANTS
+      let updatedVariants: ProductVariant[] = [];
+
+      if (updateProductDto.variants && updateProductDto.variants.length > 0) {
+        console.log(`🔄 Processing ${updateProductDto.variants.length} variants`);
+
+        // Lấy tất cả variants hiện tại
+        const existingVariants = await this.variantsRepository.find({
+          where: { productId: productObjectId }
+        });
+
+        // Xử lý từng variant trong request
+        for (let i = 0; i < updateProductDto.variants.length; i++) {
+          const variantDto = updateProductDto.variants[i];
+          
+          if (variantDto._id) {
+            // 🔄 CẬP NHẬT VARIANT HIỆN CÓ
+            console.log(`🔄 Updating existing variant: ${variantDto._id}`);
+            
+            const variantObjectId = new ObjectId(variantDto._id);
+            const existingVariant = await this.variantsRepository.findOne({
+              where: { _id: variantObjectId, productId: productObjectId }
+            });
+
+            if (!existingVariant) {
+              throw new NotFoundException(`Không tìm thấy variant với ID: ${variantDto._id}`);
+            }
+
+            // Cập nhật thông tin variant
+            const variantUpdateData: Partial<ProductVariant> = {
+              storage: variantDto.storage,
+              color: variantDto.color,
+              price: variantDto.price,
+              stock: variantDto.stock,
+              isActive: variantDto.isActive ?? existingVariant.isActive,
+              updatedAt: new Date()
+            };
+
+            // Upload ảnh mới nếu có
+            const variantFiles = files?.[`variant_${i}_images`];
+            if (variantFiles && variantFiles.length > 0) {
+              console.log(`📸 Uploading new images for variant ${variantDto.color}`);
+
+              // Xóa ảnh cũ trên Cloudinary
+              if (existingVariant.imagePublicIds && existingVariant.imagePublicIds.length > 0) {
+                await Promise.all(
+                  existingVariant.imagePublicIds.map(publicId => 
+                    this.cloudinaryService.deleteImage(publicId)
+                  )
+                );
+              }
+
+              // Upload ảnh mới
+              const newImageUrls: string[] = [];
+              const newPublicIds: string[] = [];
+
+              for (const file of variantFiles) {
+                const uploadResult = await this.cloudinaryService.uploadImage(
+                  file,
+                  `tpshop/products/${productObjectId}/variants/${variantDto.color}`
+                );
+                newImageUrls.push(uploadResult.secure_url);
+                newPublicIds.push(uploadResult.public_id);
+              }
+
+              variantUpdateData.imageUrls = newImageUrls;
+              variantUpdateData.imagePublicIds = newPublicIds;
+            }
+
+            // Lưu cập nhật
+            await this.variantsRepository.update({ _id: variantObjectId }, variantUpdateData);
+            
+            const updatedVariant = await this.variantsRepository.findOne({
+              where: { _id: variantObjectId }
+            });
+            
+            if (updatedVariant) {
+              updatedVariants.push(updatedVariant);
+            }
+
+          } else {
+            // 🆕 TẠO VARIANT MỚI
+            console.log(`🆕 Creating new variant: ${variantDto.color} - ${variantDto.storage}`);
+
+            // Tạo SKU cho variant mới
+            const productName = updateData.name || existingProduct.name;
+            const sku = `${productName.toUpperCase().replace(/\s+/g, '')}-${variantDto.storage}-${(variantDto.color || '').toUpperCase().replace(/\s+/g, '')}`;
+
+            // Kiểm tra SKU trùng
+            const existingSku = await this.variantsRepository.findOne({
+              where: { sku }
+            });
+
+            if (existingSku) {
+              throw new BadRequestException(`SKU "${sku}" đã tồn tại`);
+            }
+
+            // Upload ảnh cho variant mới
+            let newImageUrls: string[] = [];
+            let newPublicIds: string[] = [];
+
+            const variantFiles = files?.[`variant_${i}_images`];
+            if (variantFiles && variantFiles.length > 0) {
+              console.log(`📸 Uploading images for new variant ${variantDto.color}`);
+
+              for (const file of variantFiles) {
+                const uploadResult = await this.cloudinaryService.uploadImage(
+                  file,
+                  `tpshop/products/${productObjectId}/variants/${variantDto.color}`
+                );
+                newImageUrls.push(uploadResult.secure_url);
+                newPublicIds.push(uploadResult.public_id);
+              }
+            }
+
+            // Tạo variant mới
+            const newVariantData = {
+              productId: productObjectId,
+              sku,
+              storage: variantDto.storage,
+              color: variantDto.color,
+              price: variantDto.price,
+              stock: variantDto.stock,
+              imageUrls: newImageUrls,
+              imagePublicIds: newPublicIds,
+              isActive: variantDto.isActive ?? true,
+              sold: 0
+            };
+
+            const newVariant = this.variantsRepository.create(newVariantData);
+            const savedVariant = await this.variantsRepository.save(newVariant);
+            updatedVariants.push(savedVariant);
+          }
+        }
+
+        // 📍 BƯỚC 3: XÓA VARIANTS KHÔNG CÒN TRONG REQUEST
+        const variantIdsInRequest = updateProductDto.variants
+          .filter(v => v._id)
+          .map(v => v._id);
+
+        const variantsToDelete = existingVariants.filter(
+          existing => !variantIdsInRequest.includes(existing._id.toString())
+        );
+
+        if (variantsToDelete.length > 0) {
+          console.log(`🗑️ Deleting ${variantsToDelete.length} removed variants`);
+
+          for (const variantToDelete of variantsToDelete) {
+            // Xóa ảnh trên Cloudinary
+            if (variantToDelete.imagePublicIds && variantToDelete.imagePublicIds.length > 0) {
+              await Promise.all(
+                variantToDelete.imagePublicIds.map(publicId => 
+                  this.cloudinaryService.deleteImage(publicId)
+                )
+              );
+            }
+
+            // Xóa variant khỏi database
+            await this.variantsRepository.delete({ _id: variantToDelete._id });
+          }
+        }
+      } else {
+        // Nếu không có variants trong request, lấy variants hiện có
+        updatedVariants = await this.variantsRepository.find({
+          where: { productId: productObjectId }
+        });
+      }
+
+      // Lấy thông tin sản phẩm đã cập nhật
+      const updatedProduct = await this.productsRepository.findOne({
+        where: { _id: productObjectId }
+      });
+
+      console.log(`✅ Updated product "${updatedProduct!.name}" with ${updatedVariants.length} variants`);
+
+      return {
+        product: updatedProduct!,
+        variants: updatedVariants
+      };
+
+    } catch (error) {
+      console.error('❌ Error updating product:', error);
+
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      throw new BadRequestException(`Lỗi cập nhật sản phẩm: ${error.message}`);
+    }
+  }
+
+  /**
+   * 🎯 LẤY SẢN PHẨM THEO ID (CHO FORM EDIT)
+   */
+  async findOne(id: string): Promise<{ product: Product; variants: ProductVariant[] }> {
+    try {
+      console.log('🔍 Finding product by ID:', id);
+
+      if (!ObjectId.isValid(id)) {
+        throw new BadRequestException(`ID sản phẩm không hợp lệ: ${id}`);
+      }
+
+      const productObjectId = new ObjectId(id);
+
+      // Lấy sản phẩm và variants
+      const [product, variants] = await Promise.all([
+        this.productsRepository.findOne({ where: { _id: productObjectId } }),
+        this.variantsRepository.find({ 
+          where: { productId: productObjectId },
+          order: { createdAt: 'ASC' }
+        })
+      ]);
+
+      if (!product) {
+        throw new NotFoundException(`Không tìm thấy sản phẩm với ID: ${id}`);
+      }
+
+      console.log(`✅ Found product "${product.name}" with ${variants.length} variants`);
+
+      return { product, variants };
+
+    } catch (error) {
+      console.error('❌ Error finding product:', error);
+
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      throw new BadRequestException(`Lỗi lấy thông tin sản phẩm: ${error.message}`);
+    }
   }
 }
