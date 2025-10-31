@@ -18,6 +18,9 @@ export class OrderItem {
 
     @Column()
     productId: ObjectId;           // ID sản phẩm
+    
+    @Column()
+    variantId: ObjectId;           // ID biến thể sản phẩm
 
     // ===== THÔNG TIN SẢN PHẨM (snapshot) =====
     @Column()

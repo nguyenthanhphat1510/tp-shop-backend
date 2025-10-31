@@ -1,28 +1,33 @@
-// File: src/products/dto/create-variant.dto.ts
-import { IsNotEmpty, IsString, IsNumber, IsBoolean, IsOptional } from 'class-validator';
-import { Transform } from 'class-transformer';
+// src/products/dto/create-variant.dto.ts
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateVariantDto {
     @IsString()
-    @IsNotEmpty({ message: 'Dung lượng không được để trống' })
-    storage: string; // "128GB", "256GB", "512GB"
+    @IsNotEmpty({ message: 'storage is required' })
+    @Transform(({ value }) => (value ?? '').toString().trim())
+    storage!: string;
 
     @IsString()
-    @IsNotEmpty({ message: 'Màu sắc không được để trống' })
-    color: string; // "Đen", "Trắng", "Xanh Dương"
+    @IsNotEmpty({ message: 'color is required' })
+    @Transform(({ value }) => (value ?? '').toString().trim())
+    color!: string;
 
-    @Transform(({ value }) => Number(value))
-    @IsNumber({}, { message: 'Giá phải là số' })
-    @IsNotEmpty({ message: 'Giá không được để trống' })
-    price: number;
+    @Type(() => Number)
+    @Min(1, { message: 'price must be greater than 0' })
+    price!: number;
 
-    @Transform(({ value }) => Number(value))
-    @IsNumber({}, { message: 'Số lượng phải là số' })
-    @IsNotEmpty({ message: 'Số lượng không được để trống' })
-    stock: number;
+    @Type(() => Number)
+    @IsInt({ message: 'stock must be an integer' })
+    @Min(0, { message: 'stock must be 0 or greater' })
+    stock!: number;
 
-    @Transform(({ value }) => value === 'true' || value === true)
-    @IsBoolean()
     @IsOptional()
-    isActive?: boolean = true;
+    @IsBoolean()
+    @Transform(({ value }) => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'string') return value.toLowerCase() !== 'false';
+        return true;
+    })
+    isActive?: boolean;
 }

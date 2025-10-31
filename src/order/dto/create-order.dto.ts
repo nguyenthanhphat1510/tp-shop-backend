@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsEmail, IsOptional, IsEnum, IsArray, ValidateNested, IsNumber, Min, IsBoolean } from 'class-validator';
+import { IsNotEmpty, IsString, IsEmail, IsOptional, IsEnum, IsArray, ValidateNested, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentMethod } from '../entities/order.entity';
 
@@ -37,9 +37,15 @@ export class OrderItemDto {
   @IsString()
   productId: string;
 
+
   @IsNumber()
   @Min(1)
   quantity: number;
+
+  // ✅ HỖ TRỢ variantId (optional vì frontend có thể gửi)
+  @IsOptional()
+  @IsString()
+  variantId?: string;
 }
 
 export class CreateOrderDto {
@@ -54,15 +60,11 @@ export class CreateOrderDto {
   @IsString()
   note?: string;
 
-  // Option 1: Tạo từ cart hiện tại
-  @IsOptional()
-  @IsBoolean()
-  createFromCart?: boolean;
+  // ❌ BỎ createFromCart hoàn toàn
 
-  // Option 2: Buy now với items cụ thể
-  @IsOptional()
+  // ✅ items là BẮT BUỘC
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OrderItemDto)
-  items?: OrderItemDto[];
+  items: OrderItemDto[];
 }

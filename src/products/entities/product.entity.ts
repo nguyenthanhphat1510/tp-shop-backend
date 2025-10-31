@@ -17,6 +17,19 @@ export class Product {
     @Column('objectid')
     subcategoryId: ObjectId;
 
+      // ✅ THÊM 2 FIELD NÀY (CƠ BẢN)
+    @Column({ type: 'array', default: [] })
+    embedding: number[]; // Vector từ Gemini
+
+    @Column({ default: '' })
+    searchText: string; // Text dùng để tạo vector
+
+    @Column({ default: 0 })
+    ratings_average: number; // Rating trung bình
+
+    @Column({ default: 0 })
+    ratings_count: number; // Số lượng đánh giá
+
     @Column({ default: true })
     isActive: boolean;
 
@@ -25,6 +38,11 @@ export class Product {
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+ // ✅ HELPER: Create search text (ENGLISH)
+    createSearchText(): string {
+        return `${this.name} ${this.description}`.toLowerCase().trim();
+    }
 }
 
 

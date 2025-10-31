@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ProductsService } from '../products/products.service';
 
@@ -11,19 +11,25 @@ type ChatResult = {
 @Injectable()
 export class GeminiService {
     private genAI: GoogleGenerativeAI;
-
+    private readonly logger = new Logger(GeminiService.name); // ✅ Thêm Logger
     // Thứ tự ưu tiên model: nhanh → nhẹ
     private readonly MODEL_CANDIDATES = [
         process.env.GEMINI_MODEL || 'gemini-1.5-flash',
         'gemini-1.5-flash-8b',
     ];
 
+    // ✅ THÊM MODEL CHUYÊN DỤNG CHO EMBEDDING
+    private readonly EMBEDDING_MODEL = 'embedding-001';
+
     // Retry config
     private readonly MAX_RETRIES = 3;
     private readonly INITIAL_DELAY_MS = 1500; // 1.5s
     private readonly BACKOFF_FACTOR = 2;
 
-    constructor(private productsService: ProductsService) {
+    constructor(
+        @Inject(forwardRef(() => ProductsService))
+        private productsService: ProductsService
+    ) {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
             throw new Error('GEMINI_API_KEY is not configured in environment variables');
@@ -95,6 +101,59 @@ export class GeminiService {
             };
         }
     }
+
+    async createEmbedding(text: string): Promise<number[]> {
+        try {
+            console.log(`🧠 Tạo vector cho: "${text}"`);
+
+            // Gọi Gemini API
+            const model = this.genAI.getGenerativeModel({ model: 'embedding-001' });
+            const result = await model.embedContent(text);
+            
+            // Lấy vector
+            const vector = result.embedding.values;
+            
+            console.log(`✅ Tạo được vector có ${vector.length} chiều`);
+            return vector;
+
+        } catch (error) {
+            console.error('❌ Lỗi tạo vector:', error);
+            throw new Error(`Không thể tạo vector: ${error.message}`);
+        }
+    }
+
+    /**
+     * 📊 CALCULATE SIMILARITY BETWEEN 2 VECTORS (COSINE SIMILARITY)
+     */
+    calculateSimilarity(vector1: number[], vector2: number[]): number {
+        // Check if vectors have same length
+        if (vector1.length !== vector2.length) {
+            throw new Error('Vectors must have the same length');
+        }
+
+        // Calculate cosine similarity
+        let dotProduct = 0;    // A · B
+        let magnitudeA = 0;    // |A|
+        let magnitudeB = 0;    // |B|
+
+        for (let i = 0; i < vector1.length; i++) {
+            dotProduct += vector1[i] * vector2[i];
+            magnitudeA += vector1[i] * vector1[i];
+            magnitudeB += vector2[i] * vector2[i];
+        }
+
+        // Avoid division by zero
+        if (magnitudeA === 0 || magnitudeB === 0) {
+            return 0;
+        }
+
+        // Cosine similarity = (A·B) / (|A| × |B|)
+        const similarity = dotProduct / (Math.sqrt(magnitudeA) * Math.sqrt(magnitudeB));
+        
+        // Ensure result is between 0 and 1
+        return Math.max(0, similarity);
+    }
+
 
     // ---------- Helpers ----------
 
@@ -227,4 +286,6 @@ CÂU HỎI CỦA KHÁCH: ${JSON.stringify(userMessage)}
             return { isProductQuery: false, response: raw };
         }
     }
+
+
 }

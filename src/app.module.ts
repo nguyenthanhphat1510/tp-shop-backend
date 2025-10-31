@@ -11,11 +11,13 @@ import { UserModule } from './user/user.module';
 import { CategoryModule } from './category/category.module';
 import { SubcategoryModule } from './subcategory/subcategory.module';
 // import { CartModule } from './cart/cart.module';
-// import { OrderModule } from './order/order.module'; 
+import { OrderModule } from './order/order.module'; 
 import { GeminiModule } from './gemini/gemini.module';
-// import { PaymentModule } from './payment/payment.module'; // Import the Gemini module
+import { PaymentModule } from './payment/payment.module'; // Import the Gemini module
 import { ReportsModule } from './reports/reports.module'; // Import the Reports module
 import { MulterModule } from '@nestjs/platform-express';
+import { VNPayModule } from './vnpay/vnpay.module';
+import { ReviewsModule } from './reviews/reviews.module';
 
 
 
@@ -36,14 +38,16 @@ import { MulterModule } from '@nestjs/platform-express';
     GeminiModule,
     // UsersModule,
     // AuthModule,
+      VNPayModule, // Thêm VNPay module
     ProductsModule,
     AuthModule,
     UserModule,
     CategoryModule,
     SubcategoryModule,
-    //  OrderModule,
-    //  PaymentModule,
+     OrderModule,
+     PaymentModule,
      ReportsModule,
+     ReviewsModule,
   ],
   controllers: [AppController],  // ✅ Thêm dòng này
 })

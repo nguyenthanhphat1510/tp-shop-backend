@@ -18,6 +18,8 @@ export class AuthService {
   async register(registerDto: RegisterDto) {
     // Kiểm tra email đã tồn tại chưa
     const existingUser = await this.usersService.findByEmail(registerDto.email);
+    console.log('usersService', this.usersService);
+    console.log('registerDto', registerDto);  
     if (existingUser) {
       throw new BadRequestException('Email đã được sử dụng');
     }

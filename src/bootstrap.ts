@@ -9,6 +9,9 @@ export async function createNestServer() {
     
     const app = await NestFactory.create(AppModule);
     const config = app.get(ConfigService);
+
+       // ✅ THÊM GLOBAL PREFIX /api cho Vercel
+    app.setGlobalPrefix('api');
     
     app.enableCors({
         origin: config.get('CLIENT_URL') || true,

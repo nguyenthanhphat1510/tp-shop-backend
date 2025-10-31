@@ -8,25 +8,36 @@ export class ProductVariant {
     _id: ObjectId;
 
     @Column()
-    productId: ObjectId; // Link tới Product chính
+    productId: ObjectId;
 
     @Column({ unique: true })
-    sku: string; // Mã định danh duy nhất: "IPHONE16-128GB-BLACK"
+    sku: string;
 
     @Column()
-    storage: string; // "128GB", "256GB", "512GB"
+    storage: string;
 
     @Column()
-    color: string; // "Đen", "Trắng", "Xanh"
+    color: string;
 
     @Column()
-    price: number; // Giá cụ thể cho variant này
+    price: number; // Giá gốc
+
+    // ✅ THÊM FIELD GIẢM GIÁ
+    @Column({ default: 0 })
+    discountPercent: number; // % giảm giá (0-100)
+
+    @Column({ default: false })
+    isOnSale: boolean; // Có đang giảm giá không
+
+     // ✅ VECTOR EMBEDDING FIELD
+    @Column({ type: 'array', default: [] })
+    embedding: number[]; // Vector embedding from Gemini
 
     @Column()
-    stock: number; // Số lượng tồn kho
+    stock: number;
 
     @Column({ default: [] })
-    imageUrls: string[]; // Ảnh riêng cho variant (theo màu)
+    imageUrls: string[];
 
     @Column({ default: [] })
     imagePublicIds: string[];
@@ -35,11 +46,24 @@ export class ProductVariant {
     isActive: boolean;
 
     @Column({ default: 0 })
-    sold: number; // Số lượng đã bán
+    sold: number;
 
     @CreateDateColumn()
     createdAt: Date;
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    // ✅ GETTER: Tính giá sau giảm
+    get finalPrice(): number {
+        if (this.isOnSale && this.discountPercent > 0) {
+            return Math.round(this.price * (1 - this.discountPercent / 100));
+        }
+        return this.price;
+    }
+
+    // ✅ GETTER: Số tiền tiết kiệm
+    get savedAmount(): number {
+        return this.price - this.finalPrice;
+    }
 }

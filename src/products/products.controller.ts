@@ -1,215 +1,360 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  Put,
-  UseInterceptors,
-  UploadedFiles,
-  Query
-} from '@nestjs/common';
-import { FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Put, UseInterceptors, UploadedFiles, Query, BadRequestException } from '@nestjs/common';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
-import { CreateProductWithVariantsDto } from './dto/create-product-with-variants.dto'; // ✅ Import DTO mới
+import { CreateProductWithVariantsDto } from './dto/create-product-with-variants.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) { }
 
-  // ✅ POST /products - Tạo sản phẩm với variants
+  /**
+   * 🔍 API SEMANTIC SEARCH USING VECTOR
+   * ❌ COMMENT VÌ QUOTA GEMINI HẾT
+   */
+  // @Get('search-vector')
+  // async searchByVector(@Query('q') q: string) {
+  //   try {
+  //     // Validate input
+  //     if (!q || q.trim().length < 2) {
+  //       return {
+  //         success: false,
+  //         message: 'Please enter at least 2 characters to search'
+  //       };
+  //     }
+
+  //     console.log(`🤖 Vector search: "${q}"`);
+
+  //     // Call service search method
+  //     const result = await this.productsService.searchByVector(q.trim());
+
+  //     return {
+  //       success: true,
+  //       message: `Found ${result.totalFound} products for "${q}"`,
+  //       data: result
+  //     };
+
+  //   } catch (error) {
+  //     console.error('❌ Search API error:', error);
+  //     return {
+  //       success: false,
+  //       message: `Error: ${error.message}`
+  //     };
+  //   }
+  // }
+
+  // ✅ UNLIMITED VARIANTS + 5 IMAGES PER VARIANT
   @Post()
-  @UseInterceptors(FileFieldsInterceptor([
-    { name: 'variant_0_images', maxCount: 10 },
-    { name: 'variant_1_images', maxCount: 10 },
-    { name: 'variant_2_images', maxCount: 10 },
-    { name: 'variant_3_images', maxCount: 10 },
-    { name: 'variant_4_images', maxCount: 10 },
-  ]))
+  @UseInterceptors(AnyFilesInterceptor({
+    limits: {
+      files: 200,  // Tổng files (40 variants x 5 ảnh = 200)
+      fileSize: 5 * 1024 * 1024 // 5MB per file
+    }
+  }))
   async create(
-    @Body() body: any, // ✅ Thay đổi thành any để parse thủ công
-    @UploadedFiles() files: { [fieldname: string]: Express.Multer.File[] }
+    @Body() createProductDto: CreateProductWithVariantsDto,
+    @UploadedFiles() files: Express.Multer.File[]  // ✅ Array instead of object
   ) {
     try {
-      console.log('📝 POST /products - Tạo sản phẩm với variants');
-      console.log('📋 Raw body:', JSON.stringify(body, null, 2));
-      
-      // ✅ VALIDATION & PARSING
-      if (!body.name || !body.description || !body.categoryId || !body.variants) {
-        throw new Error('Thiếu thông tin bắt buộc: name, description, categoryId, variants');
-      }
-      
-      // Parse variants từ JSON string
-      let parsedVariants = [];
-      try {
-        parsedVariants = typeof body.variants === 'string' 
-          ? JSON.parse(body.variants) 
-          : body.variants;
-        
-        if (!Array.isArray(parsedVariants) || parsedVariants.length === 0) {
-          throw new Error('Variants phải là array không rỗng');
-        }
-        
-        console.log('✅ Parsed variants:', parsedVariants);
-      } catch (error) {
-        throw new Error('Lỗi parse variants JSON: ' + error.message);
-      }
-      
-      // ✅ TẠO DTO ĐÚNG FORMAT
-      const createProductDto: CreateProductWithVariantsDto = {
-        name: body.name.toString().trim(),
-        description: body.description.toString().trim(),
-        categoryId: body.categoryId.toString().trim(),
-        subcategoryId: (body.subcategoryId || body.categoryId).toString().trim(),
-        variants: parsedVariants
-      };
-      
-      console.log('📋 Final DTO:', JSON.stringify(createProductDto, null, 2));
-      console.log('📸 Files keys:', files ? Object.keys(files) : 'no files');
+      console.log('📝 Creating product with', createProductDto.variants?.length, 'variants');
 
-      const result = await this.productsService.create(createProductDto, files);
+      // ✅ Organize files (helper function)
+      const organizedFiles = this.organizeFilesByVariant(files);
+
+      // ✅ Validate max 5 images per variant
+      this.validateFilesPerVariant(organizedFiles);
+
+      // ✅ Call service
+      const result = await this.productsService.createWithVariants(
+        createProductDto,
+        organizedFiles
+      );
 
       return {
         success: true,
-        message: 'Sản phẩm đã được tạo thành công với variants',
+        message: 'Sản phẩm đã được tạo thành công',
         data: result
       };
     } catch (error) {
-      console.error('❌ CONTROLLER ERROR:', error.message);
-      console.error('❌ STACK:', error.stack);
-      
+      console.error('❌ Error:', error.message);
       return {
         success: false,
-        message: `❌ Lỗi tạo sản phẩm: ${error.message}`,
-        error: "Bad Request",
+        message: error.message,
         statusCode: 400
       };
     }
   }
 
-  // GET /products - Lấy tất cả sản phẩm
+  // ✅ Helper: Organize files
+  private organizeFilesByVariant(files: Express.Multer.File[]) {
+    const organized: { [key: string]: Express.Multer.File[] } = {};
+
+    files?.forEach(file => {
+      if (!organized[file.fieldname]) {
+        organized[file.fieldname] = [];
+      }
+      organized[file.fieldname].push(file);
+    });
+
+    return organized;
+  }
+
+  // ✅ Helper: Validate files
+  private validateFilesPerVariant(organizedFiles: { [key: string]: Express.Multer.File[] }) {
+    for (const [variantKey, variantFiles] of Object.entries(organizedFiles)) {
+      if (variantFiles.length > 5) {
+        throw new BadRequestException(
+          `${variantKey} có ${variantFiles.length} ảnh. Tối đa 5 ảnh/variant`
+        );
+      }
+    }
+  }
+
+  // ✅ GET ALL PRODUCTS
   @Get()
   async findAll() {
     try {
-      console.log('📋 GET /products');
       const products = await this.productsService.findAll();
       return {
         success: true,
         data: products
       };
     } catch (error) {
-      console.error('❌ Error in findAll controller:', error);
+      console.error('❌ Error in findAll:', error);
       throw error;
     }
   }
 
-  // GET /products/filter-price - Lọc theo giá
+  // ✅ GET BY PRICE RANGE
   @Get('filter-price')
   async filterByPrice(@Query('priceRangeId') priceRangeId: string) {
     try {
-      console.log('💰 GET /products/filter-price?priceRangeId=' + priceRangeId);
       const products = await this.productsService.findByPriceRange(priceRangeId);
       return {
         success: true,
         data: products
       };
     } catch (error) {
-      console.error('❌ Error in filterByPrice controller:', error);
+      console.error('❌ Error in filterByPrice:', error);
       throw error;
     }
   }
 
-  // GET /products/category/:categoryId - Lấy theo category
+  // ✅ GET BY CATEGORY
   @Get('category/:categoryId')
   async findByCategory(@Param('categoryId') categoryId: string) {
     try {
-      console.log(`📂 GET /products/category/${categoryId}`);
       const products = await this.productsService.findByCategory(categoryId);
       return {
         success: true,
         data: products
       };
     } catch (error) {
-      console.error('❌ Error in findByCategory controller:', error);
+      console.error('❌ Error in findByCategory:', error);
       throw error;
     }
   }
 
-  // GET /products/:id - Lấy sản phẩm theo ID
+  // ✅ GET BY ID
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
-      console.log('📋 GET /products/:id', id);
-      return await this.productsService.findOne(id);
-    } catch (error) {
-      console.error('❌ Error in findOne controller:', error);
-      throw error;
-    }
-  }
-
-  // PATCH /products/:id/toggle - Toggle trạng thái
-  @Patch(':id/toggle')
-  async toggleStatus(@Param('id') id: string) {
-    try {
-      console.log(`🔄 PATCH /products/${id}/toggle`);
-
-      const updatedProduct = await this.productsService.toggleStatus(id);
-
+      const result = await this.productsService.findOne(id);
       return {
         success: true,
-        message: `Sản phẩm đã được ${updatedProduct.product.isActive ? 'kích hoạt' : 'tạm dừng'}`,
-        data: updatedProduct,
-        newStatus: updatedProduct.product.isActive ? 'active' : 'inactive'
+        data: result
       };
     } catch (error) {
-      console.error('❌ Error in toggleStatus controller:', error);
+      console.error('❌ Error in findOne:', error);
       throw error;
     }
   }
 
-  // DELETE /products/:id - Soft delete
-  @Delete(':id')
-  async softDelete(@Param('id') id: string) {
-    try {
-      console.log(`🗑️ DELETE /products/${id}`);
-
-      const deletedProduct = await this.productsService.softDelete(id);
-
-      return {
-        success: true,
-        message: 'Sản phẩm đã được chuyển sang trạng thái tạm dừng',
-        data: deletedProduct
-      };
-    } catch (error) {
-      console.error('❌ Error in softDelete controller:', error);
-      throw error;
-    }
-  }
-
-  // ❌ TẠM THỜI BỎ UPDATE VÀ PARTIAL UPDATE - SẼ IMPLEMENT SAU
-  // @Put(':id')
+  // ✅ UPDATE PRODUCT & VARIANTS
   @Put(':id')
-  @UseInterceptors(FileFieldsInterceptor([
-    { name: 'variant_0_images', maxCount: 10 },
-    { name: 'variant_1_images', maxCount: 10 },
-    { name: 'variant_2_images', maxCount: 10 },
-    { name: 'variant_3_images', maxCount: 10 },
-    { name: 'variant_4_images', maxCount: 10 },
-    // Add more as needed
-  ]))
+  @UseInterceptors(AnyFilesInterceptor({
+    limits: {
+      files: 200,
+      fileSize: 5 * 1024 * 1024
+    }
+  }))
   async update(
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
-    @UploadedFiles() files?: { [fieldname: string]: Express.Multer.File[] }
+    @UploadedFiles() files?: Express.Multer.File[]
   ) {
     try {
-      console.log('🔄 PUT /products/:id', id, updateProductDto);
-      return await this.productsService.update(id, updateProductDto, files);
+      console.log('🔄 PUT /products/:id', id);
+      console.log('📋 Variants to update:', updateProductDto.variants?.length || 0);
+      console.log('📸 Total files:', files?.length || 0);
+
+      // ✅ Organize files by variant
+      const organizedFiles = this.organizeFilesByVariant(files || []);
+
+      // ✅ Validate max 5 images per variant
+      this.validateFilesPerVariant(organizedFiles);
+
+      // ✅ Call service
+      const result = await this.productsService.update(id, updateProductDto, organizedFiles);
+
+      return {
+        success: true,
+        message: 'Cập nhật sản phẩm thành công',
+        data: result
+      };
     } catch (error) {
-      console.error('❌ Error in update controller:', error);
+      console.error('❌ Update error:', error);
+      throw error;
+    }
+  }
+
+  // ✅ TOGGLE STATUS CHO 1 VARIANT
+  @Patch('variants/:variantId/toggle')
+  async toggleVariantStatus(@Param('variantId') variantId: string) {
+    try {
+      const variant = await this.productsService.toggleVariantStatus(variantId);
+
+      return {
+        success: true,
+        message: `Variant đã được ${variant.isActive ? 'kích hoạt' : 'tạm dừng'}`,
+        data: variant
+      };
+    } catch (error) {
+      console.error('❌ Error in toggleVariantStatus:', error);
+      throw error;
+    }
+  }
+
+  // ✅ HARD DELETE (Xóa vĩnh viễn khỏi database)
+  @Delete(':id')
+  async hardDelete(@Param('id') id: string) {
+    try {
+      const result = await this.productsService.hardDelete(id);
+      return {
+        success: true,
+        message: result.message,
+        data: result
+      };
+    } catch (error) {
+      console.error('❌ Error in hardDelete:', error);
+      throw error;
+    }
+  }
+
+  // ✅ API: Giảm giá cho 1 variant cụ thể
+  @Patch(':productId/variants/:variantId/discount')
+  async applyVariantDiscount(
+    @Param('variantId') variantId: string,
+    @Body() body: { discountPercent: number }
+  ) {
+    try {
+      const updatedVariant = await this.productsService.applyDiscountToVariant(
+        variantId,
+        body.discountPercent
+      );
+
+      return {
+        success: true,
+        message: `Đã áp dụng giảm giá ${body.discountPercent}% cho variant`,
+        data: {
+          variantId: updatedVariant._id,
+          sku: updatedVariant.sku,
+          originalPrice: updatedVariant.price.toLocaleString('vi-VN'),
+          discountPercent: updatedVariant.discountPercent,
+          finalPrice: updatedVariant.finalPrice.toLocaleString('vi-VN'),
+          savedAmount: updatedVariant.savedAmount.toLocaleString('vi-VN'),
+          isOnSale: updatedVariant.isOnSale
+        }
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ✅ API: Bỏ giảm giá cho 1 variant
+  @Delete(':productId/variants/:variantId/discount')
+  async removeVariantDiscount(@Param('variantId') variantId: string) {
+    try {
+      const updatedVariant = await this.productsService.removeDiscountFromVariant(variantId);
+
+      return {
+        success: true,
+        message: 'Đã bỏ giảm giá cho variant',
+        data: {
+          variantId: updatedVariant._id,
+          sku: updatedVariant.sku,
+          price: updatedVariant.price.toLocaleString('vi-VN'),
+          discountPercent: updatedVariant.discountPercent,
+          isOnSale: updatedVariant.isOnSale
+        }
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ✅ API: Giảm giá cho TẤT CẢ variants của product
+  @Patch(':productId/discount')
+  async applyProductDiscount(
+    @Param('productId') productId: string,
+    @Body() body: { discountPercent: number }
+  ) {
+    try {
+      const updatedVariants = await this.productsService.applyDiscountToProduct(
+        productId,
+        body.discountPercent
+      );
+
+      return {
+        success: true,
+        message: `Đã áp dụng giảm giá ${body.discountPercent}% cho ${updatedVariants.length} variants`,
+        data: {
+          productId,
+          discountPercent: body.discountPercent,
+          affectedVariants: updatedVariants.length,
+          variants: updatedVariants.map(variant => ({
+            variantId: variant._id,
+            sku: variant.sku,
+            name: `${variant.storage} - ${variant.color}`,
+            originalPrice: variant.price.toLocaleString('vi-VN'),
+            finalPrice: variant.finalPrice.toLocaleString('vi-VN'),
+            savedAmount: variant.savedAmount.toLocaleString('vi-VN')
+          }))
+        }
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ✅ API: Lấy thống kê giảm giá
+  @Get('discounts/stats')
+  async getDiscountStats() {
+    try {
+      const stats = await this.productsService.getDiscountStats();
+
+      return {
+        success: true,
+        message: 'Thống kê giảm giá',
+        data: stats
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ✅ API: Lấy danh sách variants đang giảm giá
+  @Get('sale/variants')
+  async getVariantsOnSale() {
+    try {
+      const saleVariants = await this.productsService.getVariantsOnSale();
+
+      return {
+        success: true,
+        message: `Tìm thấy ${saleVariants.length} variants đang giảm giá`,
+        data: saleVariants
+      };
+    } catch (error) {
       throw error;
     }
   }

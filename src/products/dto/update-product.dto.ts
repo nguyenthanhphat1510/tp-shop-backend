@@ -1,36 +1,30 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateProductDto } from './create-product.dto';
-import { IsOptional, IsString, IsBoolean, IsArray, ValidateNested, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsBoolean, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ObjectId } from 'mongodb';
 
 class UpdateVariantDto {
-  @IsOptional()
   @IsString()
-  _id?: string; // Nếu có _id = update, không có = create new
+  _id: string; // ✅ BẮT BUỘC
 
-  @IsOptional()
   @IsString()
-  storage?: string;
+  storage: string;
 
-  @IsOptional()
   @IsString()
-  color?: string;
+  color: string;
 
-  @IsOptional()
   @IsNumber()
-  price?: number;
+  @Min(0)
+  price: number;
 
-  @IsOptional()
   @IsNumber()
-  stock?: number;
+  @Min(0)
+  stock: number;
 
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }
 
-export class UpdateProductDto extends PartialType(CreateProductDto) {
+export class UpdateProductDto {
   @IsOptional()
   @IsString()
   name?: string;
@@ -41,11 +35,11 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {
 
   @IsOptional()
   @IsString()
-  categoryId?: ObjectId;
+  categoryId?: string;
 
   @IsOptional()
   @IsString()
-  subcategoryId?: ObjectId;
+  subcategoryId?: string;
 
   @IsOptional()
   @IsBoolean()

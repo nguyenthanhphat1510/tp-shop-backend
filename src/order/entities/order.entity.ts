@@ -18,7 +18,7 @@ export enum PaymentStatus {
 export enum PaymentMethod {
   COD = 'cod',                  // Thanh toán khi nhận hàng
   MOMO = 'momo',               // MoMo
-  ZALOPAY = 'zalopay'          // ZaloPay
+  VNPAY = 'vnpay'               // VNPay
 }
 
 @Entity('orders')

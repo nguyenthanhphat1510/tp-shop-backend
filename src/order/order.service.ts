@@ -1,254 +1,428 @@
-// import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-// import { InjectRepository } from '@nestjs/typeorm';
-// import { Repository } from 'typeorm';
-// import { ObjectId } from 'mongodb';
-// import { Order, OrderStatus, PaymentStatus } from './entities/order.entity';
-// import { OrderItem, OrderItemStatus } from './entities/order-item.entity';
-// import { CreateOrderDto } from './dto/create-order.dto';
-// import { UpdateOrderDto } from './dto/update-order.dto';
-// import { CartService } from '../cart/cart.service';
-// import { ProductsService } from '../products/products.service';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ObjectId } from 'mongodb';
+import { Order, OrderStatus, PaymentStatus } from './entities/order.entity';
+import { OrderItem, OrderItemStatus } from './entities/order-item.entity';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { UpdateOrderDto } from './dto/update-order.dto';
+import { ProductsService } from '../products/products.service';
 
-// @Injectable()
-// export class OrderService {
-//   constructor(
-//     @InjectRepository(Order)
-//     private orderRepository: Repository<Order>,
-//     @InjectRepository(OrderItem)
-//     private orderItemRepository: Repository<OrderItem>,
-//     private cartService: CartService,
-//     private productsService: ProductsService,
-//   ) {}
+@Injectable()
+export class OrderService {
+    constructor(
+        @InjectRepository(Order)
+        private orderRepository: Repository<Order>,
+        @InjectRepository(OrderItem)
+        private orderItemRepository: Repository<OrderItem>,
+        private productsService: ProductsService,
+    ) { }
 
-//   // 🆕 Tạo đơn hàng mới
-//   async create(userId: string, createOrderDto: CreateOrderDto): Promise<Order> {
-//     try {
-//       let orderItems: OrderItem[] = [];
+    /**
+     * 🆕 TẠO ĐƠN HÀNG MỚI
+     * 
+     * VÍ DỤ INPUT:
+     * userId = "670123456789abcdef123456"
+     * createOrderDto = {
+     *   "shippingInfo": {
+     *     "fullName": "Nguyễn Văn A",
+     *     "email": "user@example.com",
+     *     "phone": "0123456789",
+     *     "address": "123 Đường ABC",
+     *     "city": "Hồ Chí Minh",
+     *     "district": "Quận 1",
+     *     "ward": "Phường Bến Nghé"
+     *   },
+     *   "paymentMethod": "COD",
+     *   "note": "Giao hàng buổi chiều",
+     *   "items": [
+     *     {
+     *       "productId": "64abc123def456789",
+     *       "variantId": "64abc123def456790",
+     *       "quantity": 2
+     *     },
+     *     {
+     *       "productId": "64abc123def456791",
+     *       "variantId": "64abc123def456792", 
+     *       "quantity": 1
+     *     }
+     *   ]
+     * }
+     *
+     * VÍ DỤ OUTPUT:
+     * {
+     *   "_id": "671234567890abcdef123456",
+     *   "orderNumber": "ORD-20241001-123456",
+     *   "total": 75030000,
+     *   "orderItems": [
+     *     {
+     *       "productName": "iPhone 15 Pro (256GB - Vàng)",
+     *       "unitPrice": 25000000,
+     *       "quantity": 2,
+     *       "subtotal": 50000000
+     *     },
+     *     {
+     *       "productName": "Samsung Galaxy S24 (128GB - Đen)",
+     *       "unitPrice": 25000000,
+     *       "quantity": 1,
+     *       "subtotal": 25000000
+     *     }
+     *   ]
+     * }
+     */
+    async create(userId: string, createOrderDto: CreateOrderDto): Promise<Order> {
+        try {
+            // 🔍 BƯỚC 1: VALIDATE - Kiểm tra có sản phẩm nào để đặt hàng không
+            if (!createOrderDto.items || createOrderDto.items.length === 0) {
+                throw new BadRequestException('Không có sản phẩm nào để đặt hàng');
+            }
 
-//       // Tạo từ cart hiện tại
-//       if (createOrderDto.createFromCart || !createOrderDto.items) {
-//         orderItems = await this.createOrderItemsFromCart(userId);
-//       } else {
-//         // Tạo từ items cụ thể (buy now)
-//         orderItems = await this.createOrderItemsFromRequest(createOrderDto.items);
-//       }
+            console.log('🛒 Creating order with items:', createOrderDto.items);
 
-//       if (orderItems.length === 0) {
-//         throw new BadRequestException('Không có sản phẩm nào để đặt hàng');
-//       }
+            // 🔍 BƯỚC 2: TẠO ORDER ITEMS - Chuyển đổi từ frontend data sang database format
+            const orderItems = await this.createOrderItemsFromRequest(createOrderDto.items);
+            console.log('📦 Created order items:', orderItems.length);
 
-//          // Trừ số lượng sản phẩm trong kho
-//     for (const item of orderItems) {
-//       await this.productsService.decreaseStock(item.productId.toString(), item.quantity);
-//     }
+            // 🔍 BƯỚC 3: TRỪ STOCK - Giảm số lượng tồn kho cho từng variant
+            for (const item of createOrderDto.items) {
+                // ✅ VALIDATE variantId trước khi gọi decreaseVariantStock
+                if (!item.variantId) {
+                    throw new BadRequestException(`Thiếu variantId cho sản phẩm ${item.productId}`);
+                }
 
-//       // Tính toán giá
-//       const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-//       const shippingFee = this.calculateShippingFee(createOrderDto.shippingInfo.city);
-//       const total = subtotal + shippingFee;
+                console.log(`📉 Decreasing stock for variant: ${item.variantId}, quantity: ${item.quantity}`);
+                
+                // ✅ Bây giờ TypeScript biết item.variantId không phải undefined
+                await this.productsService.decreaseVariantStock(item.variantId, item.quantity);
+                
+                console.log(`✅ Stock decreased successfully for variant: ${item.variantId}`);
+            }
 
-//       // Tạo order
-//       const orderNumber = await this.generateOrderNumber();
-      
-//       const order = this.orderRepository.create({
-//         orderNumber,
-//         userId: new ObjectId(userId),
-//         shippingInfo: createOrderDto.shippingInfo,
-//         paymentMethod: createOrderDto.paymentMethod,
-//         paymentStatus: PaymentStatus.PENDING,
-//         subtotal,
-//         shippingFee,
-//         discount: 0,
-//         total,
-//         status: OrderStatus.PENDING,
-//         note: createOrderDto.note,
-//         createdAt: new Date(),
-//         updatedAt: new Date()
-//       });
+            // 🔍 BƯỚC 4: TÍNH TOÁN GIÁ TIỀN
+            // VÍ DỤ: 
+            // - Item 1: 25,000,000 * 2 = 50,000,000
+            // - Item 2: 25,000,000 * 1 = 25,000,000  
+            // - Subtotal: 75,000,000
+            const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+            
+            // VÍ DỤ: Hồ Chí Minh = free ship (0), tỉnh khác = 30,000
+            const shippingFee = this.calculateShippingFee(createOrderDto.shippingInfo.city);
+            
+            // VÍ DỤ: 75,000,000 + 0 = 75,000,000
+            const total = subtotal + shippingFee;
 
-//       const savedOrder = await this.orderRepository.save(order);
+            console.log('💰 Order calculations:', {
+                subtotal: subtotal.toLocaleString('vi-VN'),     // "75.000.000"
+                shippingFee: shippingFee.toLocaleString('vi-VN'), // "0"
+                total: total.toLocaleString('vi-VN')            // "75.000.000"
+            });
 
-//       // Lưu order items
-//       for (const item of orderItems) {
-//         item.orderId = savedOrder._id;
-//         await this.orderItemRepository.save(item);
-//       }
+            // 🔍 BƯỚC 5: TẠO ORDER RECORD
+            // VÍ DỤ: "ORD-20241001-123456"
+            const orderNumber = await this.generateOrderNumber();
+            
+            const order = this.orderRepository.create({
+                orderNumber,                                    // "ORD-20241001-123456"
+                userId: new ObjectId(userId),                   // ObjectId("670123456789abcdef123456")
+                shippingInfo: createOrderDto.shippingInfo,     // { fullName, email, phone, address, ... }
+                paymentMethod: createOrderDto.paymentMethod,   // "COD"
+                paymentStatus: PaymentStatus.PENDING,          // "PENDING"
+                subtotal,                                       // 75000000
+                shippingFee,                                    // 0
+                discount: 0,                                    // 0 (mặc định)
+                total,                                          // 75000000
+                status: OrderStatus.PENDING,                   // "PENDING"
+                note: createOrderDto.note,                     // "Giao hàng buổi chiều"
+                createdAt: new Date(),                          // "2024-10-01T10:30:00.000Z"
+                updatedAt: new Date()                           // "2024-10-01T10:30:00.000Z"
+            });
 
-//       // Xóa cart nếu tạo từ cart
-//       if (createOrderDto.createFromCart || !createOrderDto.items) {
-//         await this.cartService.clearCart(userId);
-//       }
+            // 🔍 BƯỚC 6: LƯU ORDER VÀO DATABASE
+            const savedOrder = await this.orderRepository.save(order);
+            console.log('✅ Order saved with ID:', savedOrder._id);
+            // Log: Order saved with ID: 671234567890abcdef123456
 
-//       // Trả về order với items
-//       return await this.findOneWithItems(savedOrder.id);
+            // 🔍 BƯỚC 7: LƯU ORDER ITEMS VÀO DATABASE
+            // Gán orderId cho từng item rồi lưu
+            for (const item of orderItems) {
+                item.orderId = savedOrder._id;                  // Liên kết với order vừa tạo
+                await this.orderItemRepository.save(item);
+            }
 
-//     } catch (error) {
-//       throw new BadRequestException(error.message || 'Không thể tạo đơn hàng');
-//     }
-//   }
+            console.log('✅ Order items saved:', orderItems.length);
+            // Log: Order items saved: 2
 
-//   // 📋 Lấy danh sách đơn hàng
-//   async findAll(userId?: string): Promise<Order[]> {
-//     const where = userId ? { userId: new ObjectId(userId) } : {};
-    
-//     return await this.orderRepository.find({
-//       where,
-//       order: { createdAt: 'DESC' }
-//     });
-//   }
+            // 🔍 BƯỚC 8: TRẢ VỀ ORDER VỚI ITEMS ĐỂ FRONTEND HIỂN THỊ
+            return await this.findOneWithItems(savedOrder._id.toString());
 
-//   // 🔍 Lấy chi tiết đơn hàng
-//   async findOne(id: string, userId?: string): Promise<Order> {
-//     const where: any = { _id: new ObjectId(id) };
-//     if (userId) {
-//       where.userId = new ObjectId(userId);
-//     }
+        } catch (error) {
+            console.error('❌ OrderService.create error:', error);
+            throw new BadRequestException(error.message || 'Không thể tạo đơn hàng');
+        }
+    }
 
-//     const order = await this.orderRepository.findOne({ where });
-    
-//     if (!order) {
-//       throw new NotFoundException('Không tìm thấy đơn hàng');
-//     }
+    /**
+     * 🔧 HELPER: TẠO ORDER ITEMS TỪ FRONTEND REQUEST VỚI GIẢM GIÁ
+     * 
+     * VÍ DỤ INPUT:
+     * items = [
+     *   { "productId": "64abc123", "variantId": "64def456", "quantity": 2 }
+     * ]
+     * 
+     * VÍ DỤ OUTPUT (với giảm giá):
+     * [
+     *   {
+     *     "productId": ObjectId("64abc123"),
+     *     "productName": "iPhone 15 Pro (256GB - Vàng)",
+     *     "unitPrice": 24000000,      // Giá sau giảm 20%
+     *     "quantity": 2,
+     *     "subtotal": 48000000,       // 24tr * 2
+     *     "originalPrice": 30000000,  // Giá gốc
+     *     "discountPercent": 20       // % giảm giá
+     *   }
+     * ]
+     */
+    private async createOrderItemsFromRequest(items: any[]): Promise<OrderItem[]> {
+        const orderItems: OrderItem[] = [];
 
-//     return order;
-//   }
+        for (const item of items) {
+            console.log(`🔍 Processing item:`, {
+                productId: item.productId,     // "64abc123"
+                variantId: item.variantId,     // "64def456" 
+                quantity: item.quantity        // 2
+            });
 
-//   // 🔍 Lấy đơn hàng với items
-//   async findOneWithItems(id: string, userId?: string): Promise<Order> {
-//     const order = await this.findOne(id, userId);
-    
-//     // Load order items
-//     const orderItems = await this.orderItemRepository.find({
-//       where: { orderId: order._id }
-//     });
+            // ✅ VALIDATE: Kiểm tra frontend có gửi đủ thông tin không
+            if (!item.productId) {
+                throw new BadRequestException('Thiếu productId trong item');
+            }
 
-//     (order as any).orderItems = orderItems;
-//     return order;
-//   }
+            if (!item.variantId) {
+                throw new BadRequestException('Thiếu variantId trong item');
+            }
 
-//   // ✏️ Cập nhật đơn hàng (Admin only)
-//   async update(id: string, updateOrderDto: UpdateOrderDto): Promise<Order> {
-//     const order = await this.findOne(id);
+            if (!item.quantity || item.quantity <= 0) {
+                throw new BadRequestException('Quantity phải lớn hơn 0');
+            }
 
-//     Object.assign(order, updateOrderDto);
+            // 🔍 LẤY THÔNG TIN PRODUCT TỪ DATABASE
+            const productResult = await this.productsService.findOne(item.productId);
 
-//     // Nếu trạng thái đơn hàng là DELIVERED thì trạng thái thanh toán phải là PAID
-//     if (
-//         updateOrderDto.status &&
-//         updateOrderDto.status.toString().toUpperCase() === 'DELIVERED'
-//     ) {
-//         order.paymentStatus = PaymentStatus.PAID;
-//     }
+            if (!productResult || !productResult.product) {
+                throw new BadRequestException(`Sản phẩm ${item.productId} không tồn tại`);
+            }
 
-//     order.updatedAt = new Date();
+            const { product, variants } = productResult;
 
-//     return await this.orderRepository.save(order);
-//   }
+            // 🔍 TÌM VARIANT CỤ THỂ MÀ USER CHỌN
+            const selectedVariant = variants.find(v => v._id.toString() === item.variantId);
 
-//   // ❌ Hủy đơn hàng
-//   async cancel(id: string, userId: string, reason?: string): Promise<Order> {
-//     const order = await this.findOne(id, userId);
+            if (!selectedVariant) {
+                throw new BadRequestException(`Variant ${item.variantId} không tồn tại cho sản phẩm ${product.name}`);
+            }
 
-//     if (!order.isCancellable) {
-//       throw new BadRequestException('Không thể hủy đơn hàng này');
+            // ✅ TÍNH GIÁ SAU GIẢM GIÁ
+            const originalPrice = selectedVariant.price;                           // Giá gốc: 30,000,000
+            const discountPercent = selectedVariant.discountPercent || 0;          // % giảm giá: 20%
+            const isOnSale = selectedVariant.isOnSale || false;                    // Có đang sale không: true
+            
+            // Sử dụng getter finalPrice hoặc tính toán thủ công
+            let finalPrice = originalPrice;
+            if (isOnSale && discountPercent > 0) {
+                finalPrice = Math.round(originalPrice * (1 - discountPercent / 100));  // 24,000,000
+            }
 
-//     }
+            const savedAmount = originalPrice - finalPrice;                        // Tiết kiệm: 6,000,000
 
-//     order.status = OrderStatus.CANCELLED;
-//     order.note = reason || order.note;
-//     order.updatedAt = new Date();
+            console.log(`✅ Found product and variant with discount:`, {
+                productName: product.name,                                         // "iPhone 15 Pro"
+                variantColor: selectedVariant.color,                               // "Vàng"
+                variantStorage: selectedVariant.storage,                           // "256GB"
+                originalPrice: originalPrice.toLocaleString('vi-VN'),              // "30.000.000"
+                discountPercent: `${discountPercent}%`,                           // "20%"
+                finalPrice: finalPrice.toLocaleString('vi-VN'),                   // "24.000.000"
+                savedAmount: savedAmount.toLocaleString('vi-VN'),                 // "6.000.000"
+                isOnSale,                                                         // true
+                variantStock: selectedVariant.stock                               // 100
+            });
 
-//     return await this.orderRepository.save(order);
-//   }
-//   // ===== HELPER METHODS =====
+            // ✅ KIỂM TRA KHO CÓ ĐỦ HÀNG KHÔNG
+            if (selectedVariant.stock < item.quantity) {
+                throw new BadRequestException(
+                    `Variant ${selectedVariant.color} - ${selectedVariant.storage} chỉ còn ${selectedVariant.stock} trong kho, không đủ ${item.quantity}`
+                );
+            }
 
-//   private async createOrderItemsFromCart(userId: string): Promise<OrderItem[]> {
-//     const cart = await this.cartService.getCart(userId);
-    
-//     if (!cart.cartItems || cart.cartItems.length === 0) {
-//       throw new BadRequestException('Giỏ hàng trống');
-//     }
+            // 💰 TÍNH TIỀN TỪ GIÁ SAU GIẢM GIÁ
+            // VÍ DỤ: 24,000,000 * 2 = 48,000,000 (thay vì 30tr * 2 = 60tr)
+            const subtotal = finalPrice * item.quantity;
 
-//     const orderItems: OrderItem[] = [];
+            // 🏗️ TẠO ORDER ITEM VỚI GIÁ ĐÃ GIẢM
+            const orderItem = this.orderItemRepository.create({
+                productId: new ObjectId(item.productId),                           // ObjectId("64abc123")
+                productName: `${product.name} (${selectedVariant.storage} - ${selectedVariant.color})`, // "iPhone 15 Pro (256GB - Vàng)"
+                productImageUrl: Array.isArray(selectedVariant.imageUrls) && selectedVariant.imageUrls.length > 0
+                    ? selectedVariant.imageUrls[0]                                // "https://example.com/iphone-gold.jpg"
+                    : '/placeholder.jpg',                                         // Fallback image
+                unitPrice: finalPrice,                                            // ✅ Giá sau giảm: 24,000,000
+                quantity: item.quantity,                                          // 2
+                subtotal,                                                         // ✅ Tổng sau giảm: 48,000,000
+                status: OrderItemStatus.ACTIVE,                                   // "ACTIVE"
+                variantId: item.variantId                                        // "64def456" (để tracking)
+            });
 
-//     for (const cartItem of cart.cartItems) {
-//       const product = await this.productsService.findOne(cartItem.productId.toString());
-      
-//       if (!product) {
-//         throw new BadRequestException(`Sản phẩm ${cartItem.productId} không tồn tại`);
-//       }
+            // ✅ Thêm thông tin giảm giá để tracking (nếu OrderItem entity hỗ trợ)
+            if (isOnSale && discountPercent > 0) {
+                (orderItem as any).originalPrice = originalPrice;                 // Giá gốc: 30,000,000
+                (orderItem as any).discountPercent = discountPercent;             // % giảm: 20%
+                (orderItem as any).savedAmount = savedAmount;                     // Tiết kiệm: 6,000,000
+                (orderItem as any).isOnSale = isOnSale;                          // true
+            }
 
-//       if (product.stock < cartItem.quantity) {
-//         throw new BadRequestException(`Sản phẩm ${product.name} chỉ còn ${product.stock} trong kho`);
-//       }
+            console.log(`✅ Created OrderItem with discount:`, {
+                productName: orderItem.productName,                              // "iPhone 15 Pro (256GB - Vàng)"
+                originalPrice: originalPrice.toLocaleString('vi-VN'),            // "30.000.000"
+                discountPercent: `${discountPercent}%`,                         // "20%"
+                finalPrice: orderItem.unitPrice.toLocaleString('vi-VN'),        // "24.000.000"
+                quantity: orderItem.quantity,                                    // 2
+                subtotal: orderItem.subtotal.toLocaleString('vi-VN'),           // "48.000.000"
+                totalSaved: (savedAmount * item.quantity).toLocaleString('vi-VN') // "12.000.000"
+            });
 
-//       const subtotal = product.price * cartItem.quantity;
+            orderItems.push(orderItem);
+        }
 
-//       const orderItem = this.orderItemRepository.create({
-//         productId: cartItem.productId,
-//         productName: product.name,
-//         productImageUrl: Array.isArray(product.imageUrls) && product.imageUrls.length > 0
-//           ? product.imageUrls[0]
-//           : '/placeholder.jpg',
-//         unitPrice: product.price,
-//         quantity: cartItem.quantity,
-//         subtotal,
-//         status: OrderItemStatus.ACTIVE
-//       });
+        return orderItems;
+    }
 
-//       orderItems.push(orderItem);
-//     }
+    /**
+     * 🚚 TÍNH PHÍ SHIP DỰA TRÊN THÀNH PHỐ
+     * 
+     * VÍ DỤ:
+     * - "Hồ Chí Minh" → 0 VNĐ (free ship)
+     * - "Hà Nội" → 0 VNĐ (free ship)  
+     * - "Đà Nẵng" → 30,000 VNĐ
+     */
+    private calculateShippingFee(city: string): number {
+        const freeShippingCities = [
+            'hồ chí minh',
+            'hà nội',
+            'tp. hồ chí minh',
+            'thành phố hồ chí minh'
+        ];
 
-//     return orderItems;
-//   }
+        const normalizedCity = city.trim().toLowerCase();
+        const isFreeShipping = freeShippingCities.some(freeCity =>
+            normalizedCity.includes(freeCity)
+        );
 
-//   private async createOrderItemsFromRequest(items: any[]): Promise<OrderItem[]> {
-//     const orderItems: OrderItem[] = [];
+        const fee = isFreeShipping ? 0 : 30000;
 
-//     for (const item of items) {
-//       const product = await this.productsService.findOne(item.productId);
-      
-//       if (!product) {
-//         throw new BadRequestException(`Sản phẩm ${item.productId} không tồn tại`);
-//       }
+        console.log(`🚚 Shipping fee calculation:`, {
+            inputCity: city,                    // "Hồ Chí Minh"
+            normalizedCity,                     // "hồ chí minh"
+            isFreeShipping,                     // true
+            fee: fee.toLocaleString('vi-VN')    // "0"
+        });
 
-//       if (product.stock < item.quantity) {
-//         throw new BadRequestException(`Sản phẩm ${product.name} chỉ còn ${product.stock} trong kho`);
-//       }
+        return fee;
+    }
 
-//       const subtotal = product.price * item.quantity;
+    /**
+     * 🔢 TẠO MÃ ĐƠN HÀNG DUY NHẤT
+     * 
+     * VÍ DỤ: "ORD-20241001-123456"
+     * Format: ORD-YYYYMMDD-XXXXXX (X = timestamp + random)
+     */
+    private async generateOrderNumber(): Promise<string> {
+        const today = new Date();
+        const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); // "20241001"
+        const timeStr = Date.now().toString().slice(-6);                     // "123456" (6 số cuối của timestamp)
+        const randomStr = Math.floor(Math.random() * 100).toString().padStart(2, '0'); // "78"
 
-//       const orderItem = this.orderItemRepository.create({
-//         productId: new ObjectId(item.productId),
-//         productName: product.name,
-//         productImageUrl: Array.isArray(product.imageUrls) && product.imageUrls.length > 0
-//           ? product.imageUrls[0]
-//           : '/placeholder.jpg',
-//         unitPrice: product.price,
-//         quantity: item.quantity,
-//         subtotal,
-//         status: OrderItemStatus.ACTIVE
-//       });
+        const orderNumber = `ORD-${dateStr}-${timeStr}${randomStr}`;         // "ORD-20241001-12345678"
 
-//       orderItems.push(orderItem);
-//     }
+        console.log(`🔢 Generated order number: ${orderNumber}`);
 
-//     return orderItems;
-//   }
+        return orderNumber;
+    }
 
-//   private calculateShippingFee(city: string): number {
-//     const freeShippingCities = ['Hồ Chí Minh', 'Hà Nội'];
-//     return freeShippingCities.includes(city) ? 0 : 30000;
-//   }
+    // 📋 Lấy danh sách đơn hàng của user
+    async findAllByUser(userId: string): Promise<Order[]> {
+        return await this.orderRepository.find({
+            where: { userId: new ObjectId(userId) },
+            order: { createdAt: 'DESC' }
+        });
+    }
 
-//   private async generateOrderNumber(): Promise<string> {
-//   const today = new Date();
-//   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  
-//   // 🔧 Tạo unique ID với timestamp
-//   const timestamp = Date.now();
-//   const randomSuffix = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-  
-//   return `ORD-${dateStr}-${timestamp.toString().slice(-6)}${randomSuffix}`;
-// }
-// }
+    // 📋 Lấy tất cả đơn hàng (Admin)
+    async findAll(): Promise<Order[]> {
+        return await this.orderRepository.find({
+            order: { createdAt: 'DESC' }
+        });
+    }
+
+    // 🔍 Lấy chi tiết đơn hàng
+    async findOne(id: string, userId?: string): Promise<Order> {
+        const where: any = { _id: new ObjectId(id) };
+        if (userId) {
+            where.userId = new ObjectId(userId);
+        }
+
+        const order = await this.orderRepository.findOne({ where });
+
+        if (!order) {
+            throw new NotFoundException('Không tìm thấy đơn hàng');
+        }
+
+        return order;
+    }
+
+    // 🔍 Lấy đơn hàng với items
+    async findOneWithItems(id: string, userId?: string): Promise<Order> {
+        const order = await this.findOne(id, userId);
+
+        // Load order items
+        const orderItems = await this.orderItemRepository.find({
+            where: { orderId: order._id }
+        });
+
+        (order as any).orderItems = orderItems;
+        return order;
+    }
+
+    // ✏️ Cập nhật đơn hàng (Admin only)
+    async update(id: string, updateOrderDto: UpdateOrderDto): Promise<Order> {
+        const order = await this.findOne(id);
+
+        Object.assign(order, updateOrderDto);
+
+        // Business rule: Delivered => Paid
+        if (
+            updateOrderDto.status &&
+            updateOrderDto.status.toString().toUpperCase() === 'DELIVERED'
+        ) {
+            order.paymentStatus = PaymentStatus.PAID;
+        }
+
+        order.updatedAt = new Date();
+
+        return await this.orderRepository.save(order);
+    }
+
+    // ❌ Hủy đơn hàng
+    async cancel(id: string, userId: string, reason?: string): Promise<Order> {
+        const order = await this.findOneWithItems(id, userId);
+
+        if (!order.isCancellable) {
+            throw new BadRequestException('Không thể hủy đơn hàng này');
+        }
+
+        order.status = OrderStatus.CANCELLED;
+        order.note = reason || order.note;
+        order.updatedAt = new Date();
+
+        return await this.orderRepository.save(order);
+    }
+
+}
