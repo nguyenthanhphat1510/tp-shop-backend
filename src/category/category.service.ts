@@ -6,6 +6,7 @@ import { Category } from './entities/category.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Product } from '../products/entities/product.entity';
+import { Subcategory } from '../subcategory/entities/subcategory.entity'; // ✅ IMPORT
 
 @Injectable()
 export class CategoryService {
@@ -14,6 +15,8 @@ export class CategoryService {
     private categoryRepository: MongoRepository<Category>,
     @InjectRepository(Product)
     private productRepository: MongoRepository<Product>,
+    @InjectRepository(Subcategory) // ✅ INJECT
+    private subCategoryRepository: MongoRepository<Subcategory>,
   ) {}
 
   async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
@@ -122,7 +125,7 @@ export class CategoryService {
 
       const objectId = new ObjectId(id);
       
-      // Find current category
+      // ===== BƯỚC 1: TÌM CATEGORY =====
       const existingCategory = await this.categoryRepository.findOne({
         where: { _id: objectId }
       });
@@ -131,7 +134,7 @@ export class CategoryService {
         throw new BadRequestException(`Không tìm thấy danh mục với ID: ${id}`);
       }
 
-      // Handle both string and boolean isActive values
+      // ===== BƯỚC 2: XÁC ĐỊNH TRẠNG THÁI HIỆN TẠI =====
       let currentStatus: boolean;
       if (typeof existingCategory.isActive === 'string') {
         currentStatus = existingCategory.isActive === 'true';
@@ -141,23 +144,62 @@ export class CategoryService {
 
       const newStatus = !currentStatus;
 
-      // Nếu đang chuyển từ active sang inactive, kiểm tra có sản phẩm không
+      console.log(`Current status: ${currentStatus} → New status: ${newStatus}`);
+
+      // ===== BƯỚC 3: KIỂM TRA RÀNG BUỘC KHI CHUYỂN ACTIVE → INACTIVE =====
       if (currentStatus === true && newStatus === false) {
-        const productsInCategory = await this.productRepository.count({
+        console.log('⚠️ Attempting to deactivate category, checking constraints...');
+
+        // ✅ KIỂM TRA SUBCATEGORIES ĐANG HOẠT ĐỘNG
+        const activeSubCategories = await this.subCategoryRepository.count({
           where: { 
             categoryId: objectId,
             isActive: true 
           }
         });
 
-        if (productsInCategory > 0) {
+        if (activeSubCategories > 0) {
           throw new BadRequestException(
-            `Không thể vô hiệu hóa danh mục "${existingCategory.name}" vì còn ${productsInCategory} sản phẩm đang hoạt động. Vui lòng vô hiệu hóa tất cả sản phẩm trong danh mục trước.`
+            `❌ Không thể vô hiệu hóa danh mục "${existingCategory.name}" vì còn ${activeSubCategories} danh mục con đang hoạt động.\n\n` +
+            `Vui lòng vô hiệu hóa tất cả danh mục con trước.`
           );
+        }
+
+        console.log(`✅ No active subcategories found`);
+
+        // ✅ KIỂM TRA PRODUCTS ĐANG HOẠT ĐỘNG
+        const activeProducts = await this.productRepository.count({
+          where: { 
+            categoryId: objectId,
+            isActive: true 
+          }
+        });
+
+        if (activeProducts > 0) {
+          throw new BadRequestException(
+            `❌ Không thể vô hiệu hóa danh mục "${existingCategory.name}" vì còn ${activeProducts} sản phẩm đang hoạt động.\n\n` +
+            `Vui lòng vô hiệu hóa hoặc chuyển tất cả sản phẩm sang danh mục khác trước.`
+          );
+        }
+
+        console.log(`✅ No active products found`);
+      }
+
+      // ===== BƯỚC 4: CÁC KIỂM TRA BỔ SUNG KHI CHUYỂN INACTIVE → ACTIVE =====
+      if (currentStatus === false && newStatus === true) {
+        console.log('ℹ️ Reactivating category (no constraints needed)');
+        
+        // ✅ OPTIONAL: Kiểm tra subcategories có tồn tại không
+        const totalSubCategories = await this.subCategoryRepository.count({
+          where: { categoryId: objectId }
+        });
+
+        if (totalSubCategories === 0) {
+          console.warn(`⚠️ Warning: Category "${existingCategory.name}" has no subcategories`);
         }
       }
 
-      // Update status
+      // ===== BƯỚC 5: CẬP NHẬT TRẠNG THÁI =====
       await this.categoryRepository.update(
         { _id: objectId },
         { 
@@ -166,7 +208,7 @@ export class CategoryService {
         }
       );
 
-      // Get updated category
+      // ===== BƯỚC 6: TRẢ VỀ CATEGORY ĐÃ CẬP NHẬT =====
       const updatedCategory = await this.categoryRepository.findOne({
         where: { _id: objectId }
       });
@@ -175,7 +217,8 @@ export class CategoryService {
         throw new BadRequestException(`Không thể lấy danh mục đã cập nhật với ID: ${id}`);
       }
 
-      console.log(`✅ Category status toggled: ${existingCategory.name} -> ${newStatus ? 'active' : 'inactive'}`);
+      console.log(`✅ Category status toggled successfully: ${existingCategory.name} → ${newStatus ? 'ACTIVE' : 'INACTIVE'}`);
+      
       return updatedCategory;
 
     } catch (error) {
@@ -189,78 +232,78 @@ export class CategoryService {
     }
   }
 
-  // ✅ Soft delete (always set to false) với kiểm tra sản phẩm
-  async softDelete(id: string): Promise<Category> {
-    try {
-      console.log(`🗑️ Soft deleting category: ID=${id}`);
-      
-      if (!ObjectId.isValid(id)) {
-        throw new BadRequestException(`ID danh mục không hợp lệ: ${id}`);
-      }
-
-      const objectId = new ObjectId(id);
-      
-      // Find category
-      const existingCategory = await this.categoryRepository.findOne({
-        where: { _id: objectId }
-      });
-
-      if (!existingCategory) {
-        throw new BadRequestException(`Không tìm thấy danh mục với ID: ${id}`);
-      }
-
-      // Kiểm tra có sản phẩm trong danh mục không
-      const productsInCategory = await this.productRepository.count({
-        where: { 
-          categoryId: objectId,
-          isActive: true 
-        }
-      });
-
-      if (productsInCategory > 0) {
-        throw new BadRequestException(
-          `Không thể xóa danh mục "${existingCategory.name}" vì còn ${productsInCategory} sản phẩm đang hoạt động. Vui lòng xóa hoặc chuyển tất cả sản phẩm sang danh mục khác trước.`
-        );
-      }
-
-      // Always set to false when deleting
-      await this.categoryRepository.update(
-        { _id: objectId },
-        { 
-          isActive: false,
-          updatedAt: new Date()
-        }
-      );
-
-      // Get updated category
-      const updatedCategory = await this.categoryRepository.findOne({
-        where: { _id: objectId }
-      });
-
-      if (!updatedCategory) {
-        throw new BadRequestException(`Không thể lấy danh mục đã cập nhật với ID: ${id}`);
-      }
-
-      console.log(`✅ Category soft deleted: ${existingCategory.name}`);
-      return updatedCategory;
-
-    } catch (error) {
-      console.error('❌ Error soft deleting category:', error);
-      
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      
-      throw new BadRequestException(`Lỗi xóa danh mục: ${error.message}`);
-    }
-  }
-
-  async remove(id: string): Promise<void> {
+  // ✅ HARD DELETE - XÓA VĨNH VIỄN KHỎI DATABASE
+async remove(id: string): Promise<{ message: string; deletedCategory: { id: string; name: string } }> {
+  try {
+    console.log(`🗑️ Hard deleting category: ID=${id}`);
+    
     if (!ObjectId.isValid(id)) {
-      throw new BadRequestException(`ID không hợp lệ: ${id}`);
+      throw new BadRequestException(`ID danh mục không hợp lệ: ${id}`);
     }
 
     const objectId = new ObjectId(id);
-    await this.categoryRepository.delete(objectId);
+    
+    // ===== BƯỚC 1: TÌM CATEGORY =====
+    const existingCategory = await this.categoryRepository.findOne({
+      where: { _id: objectId }
+    });
+
+    if (!existingCategory) {
+      throw new BadRequestException(`Không tìm thấy danh mục với ID: ${id}`);
+    }
+
+    console.log(`Found category: "${existingCategory.name}"`);
+
+    // ===== BƯỚC 2: KIỂM TRA SUBCATEGORIES (BẤT KỂ TRẠNG THÁI) =====
+    const totalSubCategories = await this.subCategoryRepository.count({
+      where: { categoryId: objectId }
+    });
+
+    if (totalSubCategories > 0) {
+      throw new BadRequestException(
+        `❌ Không thể xóa danh mục "${existingCategory.name}" vì còn ${totalSubCategories} danh mục con.\n\n` +
+        `Vui lòng xóa tất cả danh mục con trước.`
+      );
+    }
+
+    console.log(`✅ No subcategories found`);
+
+    // ===== BƯỚC 3: KIỂM TRA PRODUCTS (BẤT KỂ TRẠNG THÁI) =====
+    const totalProducts = await this.productRepository.count({
+      where: { categoryId: objectId }
+    });
+
+    if (totalProducts > 0) {
+      throw new BadRequestException(
+        `❌ Không thể xóa danh mục "${existingCategory.name}" vì còn ${totalProducts} sản phẩm.\n\n` +
+        `Vui lòng xóa hoặc chuyển tất cả sản phẩm sang danh mục khác trước.`
+      );
+    }
+
+    console.log(`✅ No products found`);
+
+    // ===== BƯỚC 4: XÓA VĨNH VIỄN KHỎI DATABASE =====
+    await this.categoryRepository.delete({ _id: objectId });
+
+    console.log(`✅ Category permanently deleted: "${existingCategory.name}"`);
+
+    // ===== BƯỚC 5: TRẢ VỀ THÔNG BÁO =====
+    return {
+      message: `Đã xóa vĩnh viễn danh mục "${existingCategory.name}" khỏi hệ thống`,
+      deletedCategory: {
+        id: id,
+        name: existingCategory.name
+      }
+    };
+
+  } catch (error) {
+    console.error('❌ Error hard deleting category:', error);
+    
+    if (error instanceof BadRequestException) {
+      throw error;
+    }
+    
+    throw new BadRequestException(`Lỗi xóa danh mục: ${error.message}`);
   }
+}
 }

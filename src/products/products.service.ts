@@ -358,81 +358,7 @@ async toggleVariantStatus(variantId: string): Promise<ProductVariant> {
   }
 }
 
-  // ✅ HARD DELETE - GIỮ NGUYÊN
-  async hardDelete(id: string): Promise<{
-    message: string;
-    deletedProduct: string;
-    deletedVariantsCount: number;
-    deletedImagesCount: number;
-  }> {
-    try {
-      console.log(`🗑️ Hard deleting product permanently: ID=${id}`);
 
-      if (!ObjectId.isValid(id)) {
-        throw new BadRequestException(`ID sản phẩm không hợp lệ: ${id}`);
-      }
-
-      const objectId = new ObjectId(id);
-
-      // STEP 1: Get product info before deletion
-      const existingProduct = await this.productsRepository.findOne({
-        where: { _id: objectId }
-      });
-
-      if (!existingProduct) {
-        throw new NotFoundException(`Không tìm thấy sản phẩm với ID: ${id}`);
-      }
-
-      // STEP 2: Get all variants of this product
-      const variants = await this.variantsRepository.find({
-        where: { productId: objectId }
-      });
-
-      console.log(`📦 Found ${variants.length} variants to delete`);
-
-      // STEP 3: Delete all images from Cloudinary
-      let deletedImagesCount = 0;
-      for (const variant of variants) {
-        if (variant.imagePublicIds && variant.imagePublicIds.length > 0) {
-          for (const publicId of variant.imagePublicIds) {
-            try {
-              await this.cloudinaryService.deleteImage(publicId);
-              deletedImagesCount++;
-              console.log(`🖼️ Deleted image: ${publicId}`);
-            } catch (error) {
-              console.warn(`⚠️ Failed to delete image ${publicId}:`, error.message);
-            }
-          }
-        }
-      }
-
-      console.log(`✅ Deleted ${deletedImagesCount} images from Cloudinary`);
-
-      // STEP 4: Delete all variants from database
-      await this.variantsRepository.delete({ productId: objectId });
-      console.log(`✅ Deleted ${variants.length} variants from database`);
-
-      // STEP 5: Delete product from database
-      await this.productsRepository.delete({ _id: objectId });
-      console.log(`✅ Deleted product "${existingProduct.name}" from database`);
-
-      return {
-        message: `Đã xóa vĩnh viễn sản phẩm "${existingProduct.name}" và tất cả dữ liệu liên quan`,
-        deletedProduct: existingProduct.name,
-        deletedVariantsCount: variants.length,
-        deletedImagesCount: deletedImagesCount
-      };
-
-    } catch (error) {
-      console.error('❌ Error hard deleting product:', error);
-
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new BadRequestException(`Lỗi xóa vĩnh viễn sản phẩm: ${error.message}`);
-    }
-  }
 
   // ✅ Tìm theo category
   async findByCategory(categoryId: string): Promise<Array<{ product: Product; variants: ProductVariant[] }>> {
@@ -571,186 +497,8 @@ async toggleVariantStatus(variantId: string): Promise<ProductVariant> {
    * 2. Update các variants HIỆN CÓ (phải có _id)
    * 3. Upload/Update ảnh cho variants
    */
-  async update(
-    id: string,
-    updateProductDto: UpdateProductDto,
-    files?: { [fieldname: string]: Express.Multer.File[] }
-  ): Promise<{ product: Product; variants: ProductVariant[] }> {
-    try {
-      console.log('🔄 Updating product:', id);
-
-      // ✅ 1. VALIDATE & GET PRODUCT
-      if (!ObjectId.isValid(id)) {
-        throw new BadRequestException('ID sản phẩm không hợp lệ');
-      }
-
-      const productObjectId = new ObjectId(id);
-      const existingProduct = await this.productsRepository.findOne({
-        where: { _id: productObjectId }
-      });
-
-      if (!existingProduct) {
-        throw new NotFoundException('Sản phẩm không tồn tại');
-      }
-
-      console.log(`✅ Found product: "${existingProduct.name}"`);
-
-      // ✅ 2. UPDATE PRODUCT BASIC INFO
-      if (updateProductDto.name) {
-        // Check duplicate name
-        const duplicateName = await this.productsRepository.findOne({
-          where: { 
-            name: updateProductDto.name,
-            _id: { $ne: productObjectId }
-          }
-        });
-
-        if (duplicateName) {
-          throw new BadRequestException(`Tên sản phẩm "${updateProductDto.name}" đã tồn tại`);
-        }
-
-        existingProduct.name = updateProductDto.name;
-      }
-
-      if (updateProductDto.description !== undefined) {
-        existingProduct.description = updateProductDto.description;
-      }
-
-      if (updateProductDto.categoryId) {
-        existingProduct.categoryId = new ObjectId(updateProductDto.categoryId);
-      }
-
-      if (updateProductDto.subcategoryId) {
-        existingProduct.subcategoryId = new ObjectId(updateProductDto.subcategoryId);
-      }
-
-      if (updateProductDto.isActive !== undefined) {
-        existingProduct.isActive = updateProductDto.isActive;
-      }
-
-      existingProduct.updatedAt = new Date();
-      await this.productsRepository.save(existingProduct);
-      console.log('✅ Product updated');
-
-      // ✅ 3. UPDATE VARIANTS (CHỈ UPDATE, BẮT BUỘC CÓ _id)
-      const updatedVariants: ProductVariant[] = [];
-
-      // ✅ FIX: Kiểm tra variants tồn tại và có length > 0
-      if (updateProductDto.variants && Array.isArray(updateProductDto.variants) && updateProductDto.variants.length > 0) {
-        console.log(`🔄 Updating ${updateProductDto.variants.length} variants`);
-
-        for (let i = 0; i < updateProductDto.variants.length; i++) {
-          const variantDto = updateProductDto.variants[i];
-
-          // ❌ BẮT BUỘC PHẢI CÓ _id
-          if (!variantDto._id) {
-            throw new BadRequestException(`Variant ${i} thiếu _id. Không thể tạo mới variant trong update.`);
-          }
-
-          if (!ObjectId.isValid(variantDto._id)) {
-            throw new BadRequestException(`Variant ${i} có ID không hợp lệ: ${variantDto._id}`);
-          }
-
-          const existingVariant = await this.variantsRepository.findOne({
-            where: { _id: new ObjectId(variantDto._id) }
-          });
-
-          if (!existingVariant) {
-            throw new NotFoundException(`Variant ${i} không tồn tại với ID: ${variantDto._id}`);
-          }
-
-          console.log(`🔄 Updating variant: ${existingVariant.sku}`);
-
-          // Update fields
-          existingVariant.storage = variantDto.storage;
-          existingVariant.color = variantDto.color;
-          existingVariant.price = variantDto.price;
-          existingVariant.stock = variantDto.stock;
-
-          if (variantDto.isActive !== undefined) {
-            existingVariant.isActive = variantDto.isActive;
-          }
-
-          // Update SKU nếu storage hoặc color thay đổi
-          const newSku = `${existingProduct.name.toUpperCase().replace(/\s+/g, '')}-${variantDto.storage}-${variantDto.color.toUpperCase().replace(/\s+/g, '')}`;
-          
-          if (newSku !== existingVariant.sku) {
-            // Check SKU uniqueness
-            const duplicateSku = await this.variantsRepository.findOne({
-              where: { 
-                sku: newSku,
-                _id: { $ne: new ObjectId(variantDto._id) }
-              }
-            });
-
-            if (duplicateSku) {
-              throw new BadRequestException(`SKU "${newSku}" đã tồn tại cho variant khác`);
-            }
-
-            existingVariant.sku = newSku;
-            console.log(`🏷️ SKU updated: ${existingVariant.sku} → ${newSku}`);
-          }
-
-          // ✅ UPDATE IMAGES (NẾU CÓ) - FIX: Kiểm tra variantFiles tồn tại và có length > 0
-          const variantFiles = files?.[`variant_${i}_images`];
-          if (variantFiles && Array.isArray(variantFiles) && variantFiles.length > 0) {
-            console.log(`📸 Updating ${variantFiles.length} images for variant ${existingVariant.color}`);
-
-            // Xóa ảnh cũ trên Cloudinary
-            if (existingVariant.imagePublicIds && existingVariant.imagePublicIds.length > 0) {
-              for (const publicId of existingVariant.imagePublicIds) {
-                try {
-                  await this.cloudinaryService.deleteImage(publicId);
-                  console.log(`🖼️ Deleted old image: ${publicId}`);
-                } catch (error) {
-                  console.warn('⚠️ Failed to delete old image');
-                }
-              }
-            }
-
-            // Upload ảnh mới
-            const newImageUrls: string[] = [];
-            const newImagePublicIds: string[] = [];
-
-            for (const file of variantFiles) {
-              const result = await this.cloudinaryService.uploadImage(
-                file,
-                `tpshop/products/${existingProduct._id}/variants/${variantDto.color}`
-              );
-              newImageUrls.push(result.secure_url);
-              newImagePublicIds.push(result.public_id);
-              console.log(`📸 Uploaded new image: ${result.public_id}`);
-            }
-
-            existingVariant.imageUrls = newImageUrls;
-            existingVariant.imagePublicIds = newImagePublicIds;
-          }
-
-          existingVariant.updatedAt = new Date();
-          const savedVariant = await this.variantsRepository.save(existingVariant);
-          updatedVariants.push(savedVariant);
-
-          console.log(`✅ Updated variant: ${savedVariant.sku}`);
-        }
-      }
-
-      console.log(`🎉 Update completed with ${updatedVariants.length} variants`);
-
-      return {
-        product: existingProduct,
-        variants: updatedVariants
-      };
-
-    } catch (error) {
-      console.error('❌ Error updating product:', error);
-
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new BadRequestException(`Lỗi cập nhật: ${error.message}`);
-    }
-  }
+ 
+  
 
   /**
    * 🎯 LẤY SẢN PHẨM THEO ID (CHO FORM EDIT)
@@ -792,6 +540,55 @@ async toggleVariantStatus(variantId: string): Promise<ProductVariant> {
       throw new BadRequestException(`Lỗi lấy thông tin sản phẩm: ${error.message}`);
     }
   }
+
+  /**
+ * 🆕 LẤY MỘT VARIANT CỤ THỂ THEO ID
+ */
+async findOneVariant(variantId: string): Promise<{
+  variant: ProductVariant;
+  product: Product;
+}> {
+  try {
+    console.log('🔍 Finding variant by ID:', variantId);
+
+    if (!ObjectId.isValid(variantId)) {
+      throw new BadRequestException(`ID variant không hợp lệ: ${variantId}`);
+    }
+
+    const variantObjectId = new ObjectId(variantId);
+
+    // Lấy variant
+    const variant = await this.variantsRepository.findOne({
+      where: { _id: variantObjectId }
+    });
+
+    if (!variant) {
+      throw new NotFoundException(`Không tìm thấy variant với ID: ${variantId}`);
+    }
+
+    // Lấy thông tin product
+    const product = await this.productsRepository.findOne({
+      where: { _id: variant.productId }
+    });
+
+    if (!product) {
+      throw new NotFoundException(`Không tìm thấy sản phẩm của variant này`);
+    }
+
+    console.log(`✅ Found variant "${variant.sku}" of product "${product.name}"`);
+
+    return { variant, product };
+
+  } catch (error) {
+    console.error('❌ Error finding variant:', error);
+
+    if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      throw error;
+    }
+
+    throw new BadRequestException(`Lỗi lấy thông tin variant: ${error.message}`);
+  }
+}
 
   // ✅ Lấy sản phẩm đang sale
   async findProductsOnSale(): Promise<{ product: Product; variants: ProductVariant[] }[]> {
@@ -1159,5 +956,413 @@ async toggleVariantStatus(variantId: string): Promise<ProductVariant> {
   //   }
   // }
 
-  // ...existing methods...
+  /**
+   * 🔄 UPDATE CHỈ MỘT VARIANT CỤ THỂ
+   * 
+   * @description Update thông tin của 1 variant duy nhất (storage, color, price, stock, isActive)
+   * @param variantId - ID của variant cần update
+   * @param updateData - Dữ liệu mới để update
+   * @param files - File ảnh mới (optional)
+   * @returns Promise<ProductVariant> - Variant đã được update
+   * 
+   * @example
+   * // Update giá và số lượng
+   * await updateVariant('variant_id_123', {
+   *   price: 25000000,
+   *   stock: 100
+   * });
+   * 
+   * // Update giá + giảm giá
+   * await updateVariant('variant_id_123', {
+   *   price: 25000000,
+   *   discountPercent: 20  // Giảm 20%
+   * });
+   * 
+   * // Update cả ảnh
+   * await updateVariant('variant_id_123', { price: 25000000 }, files);
+   */
+  async updateVariant(
+    variantId: string,
+    updateData: {
+      storage?: string;
+      color?: string;
+      price?: number;
+      stock?: number;
+      discountPercent?: number;
+      isActive?: boolean;
+    },
+    files?: Express.Multer.File[]
+  ): Promise<ProductVariant> {
+    try {
+      console.log('🔄 Updating single variant:', variantId);
+      console.log('📝 Update data:', updateData);
+
+      // ===== BƯỚC 1: VALIDATE VARIANT ID =====
+      // Kiểm tra xem variantId có đúng định dạng ObjectId không
+      if (!ObjectId.isValid(variantId)) {
+        throw new BadRequestException(`❌ ID variant không hợp lệ: ${variantId}`);
+      }
+
+      const variantObjectId = new ObjectId(variantId);
+
+      // ===== BƯỚC 2: TÌM VARIANT TRONG DATABASE =====
+      // Tìm variant hiện tại từ database
+      const existingVariant = await this.variantsRepository.findOne({
+        where: { _id: variantObjectId }
+      });
+
+      // Nếu không tìm thấy → ném lỗi 404
+      if (!existingVariant) {
+        throw new NotFoundException(`❌ Không tìm thấy variant với ID: ${variantId}`);
+      }
+
+      console.log(`✅ Found variant: ${existingVariant.sku}`);
+
+      // ===== BƯỚC 3: LẤY THÔNG TIN PRODUCT (ĐỂ TẠO SKU MỚI) =====
+      // Cần product name để tạo SKU nếu storage/color thay đổi
+      const product = await this.productsRepository.findOne({
+        where: { _id: existingVariant.productId }
+      });
+
+      if (!product) {
+        throw new NotFoundException(`❌ Không tìm thấy sản phẩm của variant này`);
+      }
+
+      console.log(`✅ Product: "${product.name}"`);
+
+      // ===== BƯỚC 4: UPDATE CÁC TRƯỜNG THÔNG TIN =====
+      
+      // 📦 Update STORAGE (nếu có)
+      if (updateData.storage !== undefined) {
+        // Validate: không được rỗng
+        if (!updateData.storage.trim()) {
+          throw new BadRequestException('❌ Dung lượng không được để trống');
+        }
+        
+        console.log(`📦 Updating storage: "${existingVariant.storage}" → "${updateData.storage}"`);
+        existingVariant.storage = updateData.storage.trim();
+      }
+
+      // 🎨 Update COLOR (nếu có)
+      if (updateData.color !== undefined) {
+        // Validate: không được rỗng
+        if (!updateData.color.trim()) {
+          throw new BadRequestException('❌ Màu sắc không được để trống');
+        }
+        
+        console.log(`🎨 Updating color: "${existingVariant.color}" → "${updateData.color}"`);
+        existingVariant.color = updateData.color.trim();
+      }
+
+      // 💰 Update PRICE (nếu có)
+      if (updateData.price !== undefined) {
+        // Validate: phải > 0
+        if (updateData.price <= 0) {
+          throw new BadRequestException('❌ Giá phải lớn hơn 0');
+        }
+        
+        // Validate: không quá 1 tỷ
+        if (updateData.price > 1_000_000_000) {
+          throw new BadRequestException('❌ Giá không được vượt quá 1 tỷ VNĐ');
+        }
+        
+        console.log(`💰 Updating price: ${existingVariant.price.toLocaleString('vi-VN')} → ${updateData.price.toLocaleString('vi-VN')} VNĐ`);
+        existingVariant.price = updateData.price;
+      }
+
+      // 📦 Update STOCK (nếu có)
+      if (updateData.stock !== undefined) {
+        // Validate: không được âm
+        if (updateData.stock < 0) {
+          throw new BadRequestException('❌ Số lượng không được âm');
+        }
+        
+        console.log(`📦 Updating stock: ${existingVariant.stock} → ${updateData.stock}`);
+        existingVariant.stock = updateData.stock;
+      }
+
+      // 🏷️ Update DISCOUNT (nếu có)
+      if (updateData.discountPercent !== undefined) {
+        // Validate: phải từ 0-100
+        if (updateData.discountPercent < 0 || updateData.discountPercent > 100) {
+          throw new BadRequestException('❌ Giảm giá phải từ 0-100%');
+        }
+        
+        console.log(`🏷️ Updating discount: ${existingVariant.discountPercent}% → ${updateData.discountPercent}%`);
+        existingVariant.discountPercent = updateData.discountPercent;
+        existingVariant.isOnSale = updateData.discountPercent > 0;
+        
+        // ✅ Tự động tính finalPrice và savedAmount (từ @BeforeInsert/@BeforeUpdate)
+      }
+
+      // ✅ Update IS_ACTIVE (nếu có)
+      if (updateData.isActive !== undefined) {
+        console.log(`✅ Updating isActive: ${existingVariant.isActive} → ${updateData.isActive}`);
+        existingVariant.isActive = updateData.isActive;
+      }
+
+      // ===== BƯỚC 5: UPDATE SKU (NẾU STORAGE HOẶC COLOR THAY ĐỔI) =====
+      /**
+       * SKU Format: PRODUCTNAME-STORAGE-COLOR
+       * Example: IPHONE16-256GB-VIOLET
+       * 
+       * Chỉ update SKU khi:
+       * - Storage hoặc Color thay đổi
+       * - SKU mới phải unique (không trùng variant khác)
+       */
+      const newSku = `${product.name.toUpperCase().replace(/\s+/g, '')}-${existingVariant.storage.toUpperCase().replace(/\s+/g, '')}-${existingVariant.color.toUpperCase().replace(/\s+/g, '')}`;
+      
+      // Nếu SKU thay đổi → validate uniqueness
+      if (newSku !== existingVariant.sku) {
+        console.log(`🏷️ SKU changed: "${existingVariant.sku}" → "${newSku}"`);
+        
+        // Kiểm tra SKU mới đã tồn tại chưa
+        const duplicateSku = await this.variantsRepository.findOne({
+          where: { 
+            sku: newSku,
+            _id: { $ne: variantObjectId } // Loại trừ chính variant này
+          }
+        });
+
+        if (duplicateSku) {
+          throw new BadRequestException(
+            `❌ SKU "${newSku}" đã tồn tại cho variant khác. ` +
+            `Vui lòng chọn storage/color khác hoặc kiểm tra lại.`
+          );
+        }
+
+        existingVariant.sku = newSku;
+        console.log(`✅ SKU updated successfully`);
+      } else {
+        console.log(`ℹ️ SKU unchanged: "${existingVariant.sku}"`);
+      }
+
+      // ===== BƯỚC 6: UPDATE IMAGES (NẾU CÓ FILE MỚI) =====
+      /**
+       * Quy trình:
+       * 1. Xóa TẤT CẢ ảnh cũ trên Cloudinary
+       * 2. Upload ảnh mới lên Cloudinary
+       * 3. Lưu URLs và publicIds mới
+       */
+      if (files && files.length > 0) {
+        console.log(`📸 Updating ${files.length} images for variant ${existingVariant.color}`);
+
+        // STEP 6.1: XÓA ẢNH CŨ TRÊN CLOUDINARY
+        if (existingVariant.imagePublicIds && existingVariant.imagePublicIds.length > 0) {
+          console.log(`🗑️ Deleting ${existingVariant.imagePublicIds.length} old images...`);
+          
+          for (const publicId of existingVariant.imagePublicIds) {
+            try {
+              await this.cloudinaryService.deleteImage(publicId);
+              console.log(`   ✅ Deleted: ${publicId}`);
+            } catch (error) {
+              // Không ném lỗi nếu xóa thất bại, chỉ log warning
+              console.warn(`   ⚠️ Failed to delete ${publicId}: ${error.message}`);
+            }
+          }
+        }
+
+        // STEP 6.2: UPLOAD ẢNH MỚI LÊN CLOUDINARY
+        console.log('📤 Uploading new images...');
+        const newImageUrls: string[] = [];
+        const newImagePublicIds: string[] = [];
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          console.log(`   📸 Uploading image ${i + 1}/${files.length}...`);
+          
+          try {
+            // Upload với folder path: tpshop/products/{productId}/variants/{color}
+            const result = await this.cloudinaryService.uploadImage(
+              file,
+              `tpshop/products/${product._id}/variants/${existingVariant.color}`
+            );
+            
+            newImageUrls.push(result.secure_url);
+            newImagePublicIds.push(result.public_id);
+            
+            console.log(`   ✅ Uploaded: ${result.public_id}`);
+          } catch (error) {
+            console.error(`   ❌ Failed to upload image ${i + 1}:`, error.message);
+            throw new BadRequestException(`❌ Lỗi upload ảnh ${i + 1}: ${error.message}`);
+          }
+        }
+
+        // STEP 6.3: CẬP NHẬT URLS VÀ PUBLIC_IDS
+        existingVariant.imageUrls = newImageUrls;
+        existingVariant.imagePublicIds = newImagePublicIds;
+        
+        console.log(`✅ Updated images: ${newImageUrls.length} new images saved`);
+      } else {
+        console.log('ℹ️ No new images to update');
+      }
+
+      // ===== BƯỚC 7: CẬP NHẬT TIMESTAMP VÀ LƯU VÀO DATABASE =====
+      existingVariant.updatedAt = new Date();
+      
+      console.log('💾 Saving variant to database...');
+      const savedVariant = await this.variantsRepository.save(existingVariant);
+      
+      console.log(`✅ Variant updated successfully!`);
+      console.log(`📊 Final data:`, {
+        sku: savedVariant.sku,
+        storage: savedVariant.storage,
+        color: savedVariant.color,
+        price: savedVariant.price.toLocaleString('vi-VN'),
+        stock: savedVariant.stock,
+        discountPercent: savedVariant.discountPercent,
+        finalPrice: savedVariant.finalPrice?.toLocaleString('vi-VN'),
+        isActive: savedVariant.isActive,
+        imageCount: savedVariant.imageUrls.length
+      });
+
+      return savedVariant;
+
+    } catch (error) {
+      console.error('❌ Error updating variant:', error);
+
+      // Giữ nguyên lỗi validation
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      // Wrap các lỗi khác
+      throw new BadRequestException(`❌ Lỗi cập nhật variant: ${error.message}`);
+    }
+  }
+
+  /**
+   * 🗑️ XÓA CHỈ MỘT VARIANT CỤ THỂ
+   * 
+   * @description Xóa 1 variant duy nhất mà không ảnh hưởng đến:
+   * - Product chính
+   * - Các variants khác
+   * 
+   * @param variantId - ID của variant cần xóa
+   * @returns Promise<{ message, deletedVariant, deletedImagesCount }>
+   * 
+   * @throws {BadRequestException} Nếu variantId không hợp lệ
+   * @throws {NotFoundException} Nếu variant không tồn tại
+   * @throws {BadRequestException} Nếu đây là variant cuối cùng của product
+   * 
+   * @example
+   * await productsService.deleteVariant('variant_id_123');
+   */
+  async deleteVariant(variantId: string): Promise<{
+    message: string;
+    deletedVariant: {
+      sku: string;
+      storage: string;
+      color: string;
+    };
+    deletedImagesCount: number;
+    productName: string;
+    remainingVariants: number;
+  }> {
+    try {
+      console.log(`🗑️ Deleting variant: ID=${variantId}`);
+
+      // ===== BƯỚC 1: VALIDATE VARIANT ID =====
+      if (!ObjectId.isValid(variantId)) {
+        throw new BadRequestException(`❌ ID variant không hợp lệ: ${variantId}`);
+      }
+
+      const variantObjectId = new ObjectId(variantId);
+
+      // ===== BƯỚC 2: TÌM VARIANT TRONG DATABASE =====
+      const existingVariant = await this.variantsRepository.findOne({
+        where: { _id: variantObjectId }
+      });
+
+      if (!existingVariant) {
+        throw new NotFoundException(`❌ Không tìm thấy variant với ID: ${variantId}`);
+      }
+
+      console.log(`✅ Found variant: ${existingVariant.sku}`);
+
+      // ===== BƯỚC 3: KIỂM TRA ĐÂY CÓ PHẢI VARIANT CUỐI CÙNG KHÔNG =====
+      /**
+       * Không cho phép xóa variant cuối cùng vì:
+       * - Product phải có ít nhất 1 variant
+       * - Nếu muốn xóa hết → xóa luôn cả product
+       */
+      const totalVariants = await this.variantsRepository.count({
+        where: { productId: existingVariant.productId }
+      });
+
+      if (totalVariants === 1) {
+        throw new BadRequestException(
+          `❌ Không thể xóa variant cuối cùng!\n` +
+          `Sản phẩm phải có ít nhất 1 variant.\n` +
+          `Nếu muốn xóa toàn bộ, vui lòng xóa sản phẩm chính.`
+        );
+      }
+
+      console.log(`ℹ️ Product has ${totalVariants} variants (${totalVariants - 1} will remain after deletion)`);
+
+      // ===== BƯỚC 4: LẤY THÔNG TIN PRODUCT (ĐỂ HIỂN THỊ MESSAGE) =====
+      const product = await this.productsRepository.findOne({
+        where: { _id: existingVariant.productId }
+      });
+
+      if (!product) {
+        throw new NotFoundException(`❌ Không tìm thấy sản phẩm của variant này`);
+      }
+
+      console.log(`✅ Product: "${product.name}"`);
+
+      // ===== BƯỚC 5: XÓA TẤT CẢ ẢNH TRÊN CLOUDINARY =====
+      let deletedImagesCount = 0;
+
+      if (existingVariant.imagePublicIds && existingVariant.imagePublicIds.length > 0) {
+        console.log(`🖼️ Deleting ${existingVariant.imagePublicIds.length} images from Cloudinary...`);
+
+        for (const publicId of existingVariant.imagePublicIds) {
+          try {
+            await this.cloudinaryService.deleteImage(publicId);
+            deletedImagesCount++;
+            console.log(`   ✅ Deleted: ${publicId}`);
+          } catch (error) {
+            // Không ném lỗi nếu xóa ảnh thất bại
+            console.warn(`   ⚠️ Failed to delete ${publicId}: ${error.message}`);
+          }
+        }
+
+        console.log(`✅ Deleted ${deletedImagesCount}/${existingVariant.imagePublicIds.length} images`);
+      } else {
+        console.log(`ℹ️ No images to delete`);
+      }
+
+      // ===== BƯỚC 6: XÓA VARIANT KHỎI DATABASE =====
+      await this.variantsRepository.delete({ _id: variantObjectId });
+
+      console.log(`✅ Deleted variant "${existingVariant.sku}" from database`);
+
+      // ===== BƯỚC 7: TRẢ VỀ KẾT QUẢ =====
+      const remainingVariants = totalVariants - 1;
+
+      return {
+        message: `Đã xóa variant "${existingVariant.storage} - ${existingVariant.color}" khỏi sản phẩm "${product.name}"`,
+        deletedVariant: {
+          sku: existingVariant.sku,
+          storage: existingVariant.storage,
+          color: existingVariant.color
+        },
+        deletedImagesCount: deletedImagesCount,
+        productName: product.name,
+        remainingVariants: remainingVariants
+      };
+
+    } catch (error) {
+      console.error('❌ Error deleting variant:', error);
+
+      // Giữ nguyên lỗi validation
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      // Wrap các lỗi khác
+      throw new BadRequestException(`❌ Lỗi xóa variant: ${error.message}`);
+    }
+  }
 }

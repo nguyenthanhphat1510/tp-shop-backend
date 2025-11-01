@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Put, UseInterceptors, UploadedFiles, Query, BadRequestException } from '@nestjs/common';
-import { AnyFilesInterceptor } from '@nestjs/platform-express';
+import { AnyFilesInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { CreateProductWithVariantsDto } from './dto/create-product-with-variants.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -140,6 +140,56 @@ export class ProductsController {
     }
   }
 
+  // ✅ GET DISCOUNT STATS - Move before :id routes
+  @Get('discounts/stats')
+  async getDiscountStats() {
+    try {
+      const stats = await this.productsService.getDiscountStats();
+
+      return {
+        success: true,
+        message: 'Thống kê giảm giá',
+        data: stats
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ✅ GET SALE VARIANTS - Move before :id routes
+  @Get('sale/variants')
+  async getVariantsOnSale() {
+    try {
+      const saleVariants = await this.productsService.getVariantsOnSale();
+
+      return {
+        success: true,
+        message: `Tìm thấy ${saleVariants.length} variants đang giảm giá`,
+        data: saleVariants
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ✅ GET ONE VARIANT BY ID - Move BEFORE :id route to avoid conflict
+  @Get('variants/:variantId')
+  async findOneVariant(@Param('variantId') variantId: string) {
+    try {
+      console.log('🔍 GET /products/variants/:variantId', variantId);
+
+      const result = await this.productsService.findOneVariant(variantId);
+
+      return {
+        success: true,
+        data: result
+      };
+    } catch (error) {
+      console.error('❌ Error in findOneVariant:', error);
+      throw error;
+    }
+  }
+
   // ✅ GET BY CATEGORY
   @Get('category/:categoryId')
   async findByCategory(@Param('categoryId') categoryId: string) {
@@ -155,7 +205,7 @@ export class ProductsController {
     }
   }
 
-  // ✅ GET BY ID
+  // ✅ GET BY ID - Must be AFTER specific routes
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
@@ -168,46 +218,39 @@ export class ProductsController {
       console.error('❌ Error in findOne:', error);
       throw error;
     }
+  } 
+
+@Patch('variants/:variantId')
+@UseInterceptors(FilesInterceptor('images', 5))
+async updateVariant(
+  @Param('variantId') variantId: string,
+  @Body() updateData: {
+    storage?: string;
+    color?: string;
+    price?: number;
+    stock?: number;
+    discountPercent?: number;
+    isActive?: boolean;
+  },
+  @UploadedFiles() files?: Express.Multer.File[]
+) {
+  try {
+    const updatedVariant = await this.productsService.updateVariant(
+      variantId,
+      updateData,
+      files
+    );
+
+    return {
+      success: true,
+      message: 'Cập nhật variant thành công',
+      data: updatedVariant
+    };
+  } catch (error) {
+    throw error;
   }
-
-  // ✅ UPDATE PRODUCT & VARIANTS
-  @Put(':id')
-  @UseInterceptors(AnyFilesInterceptor({
-    limits: {
-      files: 200,
-      fileSize: 5 * 1024 * 1024
-    }
-  }))
-  async update(
-    @Param('id') id: string,
-    @Body() updateProductDto: UpdateProductDto,
-    @UploadedFiles() files?: Express.Multer.File[]
-  ) {
-    try {
-      console.log('🔄 PUT /products/:id', id);
-      console.log('📋 Variants to update:', updateProductDto.variants?.length || 0);
-      console.log('📸 Total files:', files?.length || 0);
-
-      // ✅ Organize files by variant
-      const organizedFiles = this.organizeFilesByVariant(files || []);
-
-      // ✅ Validate max 5 images per variant
-      this.validateFilesPerVariant(organizedFiles);
-
-      // ✅ Call service
-      const result = await this.productsService.update(id, updateProductDto, organizedFiles);
-
-      return {
-        success: true,
-        message: 'Cập nhật sản phẩm thành công',
-        data: result
-      };
-    } catch (error) {
-      console.error('❌ Update error:', error);
-      throw error;
-    }
-  }
-
+}
+  
   // ✅ TOGGLE STATUS CHO 1 VARIANT
   @Patch('variants/:variantId/toggle')
   async toggleVariantStatus(@Param('variantId') variantId: string) {
@@ -225,21 +268,7 @@ export class ProductsController {
     }
   }
 
-  // ✅ HARD DELETE (Xóa vĩnh viễn khỏi database)
-  @Delete(':id')
-  async hardDelete(@Param('id') id: string) {
-    try {
-      const result = await this.productsService.hardDelete(id);
-      return {
-        success: true,
-        message: result.message,
-        data: result
-      };
-    } catch (error) {
-      console.error('❌ Error in hardDelete:', error);
-      throw error;
-    }
-  }
+
 
   // ✅ API: Giảm giá cho 1 variant cụ thể
   @Patch(':productId/variants/:variantId/discount')
@@ -327,35 +356,21 @@ export class ProductsController {
     }
   }
 
-  // ✅ API: Lấy thống kê giảm giá
-  @Get('discounts/stats')
-  async getDiscountStats() {
+  // ✅ XÓA CHỈ MỘT VARIANT CỤ THỂ
+  @Delete('variants/:variantId')
+  async deleteVariant(@Param('variantId') variantId: string) {
     try {
-      const stats = await this.productsService.getDiscountStats();
-
+      const result = await this.productsService.deleteVariant(variantId);
+      
       return {
         success: true,
-        message: 'Thống kê giảm giá',
-        data: stats
+        message: result.message,
+        data: result
       };
     } catch (error) {
+      console.error('❌ Error in deleteVariant:', error);
       throw error;
     }
   }
 
-  // ✅ API: Lấy danh sách variants đang giảm giá
-  @Get('sale/variants')
-  async getVariantsOnSale() {
-    try {
-      const saleVariants = await this.productsService.getVariantsOnSale();
-
-      return {
-        success: true,
-        message: `Tìm thấy ${saleVariants.length} variants đang giảm giá`,
-        data: saleVariants
-      };
-    } catch (error) {
-      throw error;
-    }
-  }
 }

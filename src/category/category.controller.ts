@@ -34,15 +34,19 @@ export class CategoryController {
     return this.categoryService.toggleStatus(id);
   }
 
-  // ✅ Soft delete API  
-  @Patch(':id/soft-delete')
-  softDelete(@Param('id') id: string) {
-    return this.categoryService.softDelete(id);
-  }
-
+  // ✅ HARD DELETE (XÓA VĨNH VIỄN) - CẬP NHẬT TRẢ VỀ MESSAGE
   @Delete(':id')
-  // @UseGuards(JwtAuthGuard)
-  remove(@Param('id') id: string) {
-    return this.categoryService.remove(id);
+  async remove(@Param('id') id: string) {
+    try {
+      const result = await this.categoryService.remove(id);
+      return {
+        success: true,
+        message: result.message,
+        data: result.deletedCategory
+      };
+    } catch (error) {
+      console.error('❌ Error in remove endpoint:', error);
+      throw error;
+    }
   }
 }

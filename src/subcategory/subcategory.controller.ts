@@ -32,21 +32,37 @@ export class SubcategoryController {
     return this.subcategoryService.update(id, updateSubcategoryDto);
   }
 
-  // ✅ Toggle status API
+  // ✅ TOGGLE STATUS - CÓ KIỂM TRA RÀNG BUỘC
   @Patch(':id/toggle-status')
-  toggleStatus(@Param('id') id: string) {
-    return this.subcategoryService.toggleStatus(id);
+  async toggleStatus(@Param('id') id: string) {
+    try {
+      const result = await this.subcategoryService.toggleStatus(id);
+      return result;
+    } catch (error) {
+      console.error('❌ Error in toggleStatus endpoint:', error);
+      throw error;
+    }
   }
 
-  // ✅ Soft delete API
-  @Patch(':id/soft-delete')
-  softDelete(@Param('id') id: string) {
-    return this.subcategoryService.softDelete(id);
-  }
-
+ // ✅ HARD DELETE - XÓA VĨNH VIỄN
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.subcategoryService.remove(id);
+  async remove(@Param('id') id: string) {
+    try {
+      console.log(`🗑️ Controller: Deleting subcategory ${id}`);
+      
+      const result = await this.subcategoryService.remove(id);
+      
+      console.log('✅ Controller: Delete result:', result);
+      
+      return {
+        success: true,
+        message: result.message,
+        data: result.deletedSubcategory
+      };
+    } catch (error) {
+      console.error('❌ Controller: Error in remove endpoint:', error);
+      throw error;
+    }
   }
 
    // API lấy sản phẩm theo subcategory

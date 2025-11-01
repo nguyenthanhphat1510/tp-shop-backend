@@ -218,7 +218,7 @@ export class SubcategoryService {
 
       const objectId = new MongoObjectId(id);
       
-      // Find current subcategory
+      // ===== BƯỚC 1: TÌM SUBCATEGORY =====
       const existingSubcategory = await this.subcategoryRepository.findOne({
         where: { _id: objectId }
       });
@@ -227,7 +227,7 @@ export class SubcategoryService {
         throw new BadRequestException(`Không tìm thấy danh mục con với ID: ${id}`);
       }
 
-      // Handle both string and boolean isActive values
+      // ===== BƯỚC 2: XÁC ĐỊNH TRẠNG THÁI HIỆN TẠI =====
       let currentStatus: boolean;
       if (typeof existingSubcategory.isActive === 'string') {
         currentStatus = existingSubcategory.isActive === 'true';
@@ -236,61 +236,48 @@ export class SubcategoryService {
       }
 
       const newStatus = !currentStatus;
-      console.log(`Current status: ${currentStatus}, New status: ${newStatus}`);
+      console.log(`Current status: ${currentStatus} → New status: ${newStatus}`);
 
-      // ✅ Kiểm tra có sản phẩm trong subcategory không - FIX LOGIC
-      console.log(`🔍 Checking products in subcategory ${objectId}...`);
-      
-      // Thử nhiều cách query để đảm bảo
-      const productsCount1 = await this.productRepository.count({
-        where: { subcategoryId: objectId }
-      });
-      
-      const productsCount2 = await this.productRepository.count({
-        where: { subcategoryId: objectId.toString() }
-      });
+      // ===== BƯỚC 3: KIỂM TRA RÀNG BUỘC KHI CHUYỂN ACTIVE → INACTIVE =====
+      if (currentStatus === true && newStatus === false) {
+        console.log('⚠️ Attempting to deactivate subcategory, checking product constraints...');
 
-      // Query thực tế để debug
-      const allProducts = await this.productRepository.find({});
-      console.log(`📊 Total products in DB: ${allProducts.length}`);
-      
-      const matchingProducts = allProducts.filter(product => {
-        const productSubcategoryId = product.subcategoryId;
-        console.log(`Product ${product.name}: subcategoryId = ${productSubcategoryId} (type: ${typeof productSubcategoryId})`);
+        // ✅ KIỂM TRA SẢN PHẨM THUỘC VỀ SUBCATEGORY
+        const allProducts = await this.productRepository.find({});
         
-        // So sánh nhiều cách
-        return (
-          productSubcategoryId?.toString() === objectId.toString() ||
-          productSubcategoryId?.toString() === id ||
-          (productSubcategoryId instanceof MongoObjectId && productSubcategoryId.equals(objectId))
-        );
-      });
-
-      console.log(`🔍 Products count method 1 (ObjectId): ${productsCount1}`);
-      console.log(`🔍 Products count method 2 (String): ${productsCount2}`);
-      console.log(`🔍 Products found by filter: ${matchingProducts.length}`);
-      console.log(`🔍 Matching products:`, matchingProducts.map(p => ({ name: p.name, subcategoryId: p.subcategoryId, isActive: p.isActive })));
-      const productsInSubcategory = Math.max(productsCount1, productsCount2, matchingProducts.length);
-
-      if (productsInSubcategory > 0) {
-        // ✅ Fix type-safe comparison for isActive
-        const activeProducts = matchingProducts.filter(p => {
-          if (typeof p.isActive === 'string') {
-            return p.isActive === 'true';
-          }
-          return p.isActive === true;
-        });
-        
-        console.log(`🔍 Active products: ${activeProducts.length}`);
-
-        if (activeProducts.length > 0) {
-          throw new BadRequestException(
-            `Không thể thay đổi trạng thái danh mục con "${existingSubcategory.name}" vì còn ${activeProducts.length} sản phẩm đang hoạt động. Vui lòng xử lý tất cả sản phẩm trong danh mục con trước.`
+        const productsInSubcategory = allProducts.filter(product => {
+          const productSubcategoryId = product.subcategoryId;
+          return (
+            productSubcategoryId?.toString() === objectId.toString() ||
+            (productSubcategoryId instanceof MongoObjectId && productSubcategoryId.equals(objectId))
           );
+        });
+
+        console.log(`🔍 Total products in subcategory: ${productsInSubcategory.length}`);
+
+        if (productsInSubcategory.length > 0) {
+          // ✅ KIỂM TRA SẢN PHẨM ĐANG HOẠT ĐỘNG
+          const activeProducts = productsInSubcategory.filter(p => {
+            if (typeof p.isActive === 'string') {
+              return p.isActive === 'true';
+            }
+            return p.isActive === true;
+          });
+          
+          console.log(`🔍 Active products: ${activeProducts.length}`);
+
+          if (activeProducts.length > 0) {
+            throw new BadRequestException(
+              `❌ Không thể vô hiệu hóa danh mục con "${existingSubcategory.name}" vì còn ${activeProducts.length} sản phẩm đang hoạt động.\n\n` +
+              `Vui lòng vô hiệu hóa hoặc chuyển tất cả sản phẩm sang danh mục khác trước.`
+            );
+          }
+
+          console.log(`✅ No active products, but ${productsInSubcategory.length} inactive products exist`);
         }
       }
 
-      // Update status
+      // ===== BƯỚC 4: CẬP NHẬT TRẠNG THÁI =====
       await this.subcategoryRepository.update(
         { _id: objectId },
         { 
@@ -299,7 +286,7 @@ export class SubcategoryService {
         }
       );
 
-      // Get updated subcategory
+      // ===== BƯỚC 5: TRẢ VỀ SUBCATEGORY ĐÃ CẬP NHẬT =====
       const updatedSubcategory = await this.subcategoryRepository.findOne({
         where: { _id: objectId }
       });
@@ -308,7 +295,8 @@ export class SubcategoryService {
         throw new BadRequestException(`Không thể lấy danh mục con đã cập nhật với ID: ${id}`);
       }
 
-      console.log(`✅ Subcategory status toggled: ${existingSubcategory.name} -> ${newStatus ? 'active' : 'inactive'}`);
+      console.log(`✅ Subcategory status toggled: ${existingSubcategory.name} → ${newStatus ? 'ACTIVE' : 'INACTIVE'}`);
+      
       return updatedSubcategory;
 
     } catch (error) {
@@ -322,10 +310,10 @@ export class SubcategoryService {
     }
   }
 
-  // ✅ Soft delete với kiểm tra sản phẩm chính xác
-  async softDelete(id: string): Promise<Subcategory> {
+  // ✅ HARD DELETE - XÓA VĨNH VIỄN KHỎI DATABASE
+  async remove(id: string): Promise<{ message: string; deletedSubcategory: { id: string; name: string } }> {
     try {
-      console.log(`🗑️ Soft deleting subcategory: ID=${id}`);
+      console.log(`🗑️ Hard deleting subcategory: ID=${id}`);
       
       if (!MongoObjectId.isValid(id)) {
         throw new BadRequestException(`ID danh mục con không hợp lệ: ${id}`);
@@ -333,7 +321,7 @@ export class SubcategoryService {
 
       const objectId = new MongoObjectId(id);
       
-      // Find subcategory
+      // ===== BƯỚC 1: TÌM SUBCATEGORY =====
       const existingSubcategory = await this.subcategoryRepository.findOne({
         where: { _id: objectId }
       });
@@ -342,60 +330,46 @@ export class SubcategoryService {
         throw new BadRequestException(`Không tìm thấy danh mục con với ID: ${id}`);
       }
 
-      // ✅ Kiểm tra có sản phẩm trong subcategory không - SAME LOGIC AS TOGGLE
-      console.log(`🔍 Checking products in subcategory ${objectId} for deletion...`);
-      
+      console.log(`Found subcategory: "${existingSubcategory.name}"`);
+
+      // ===== BƯỚC 2: KIỂM TRA SẢN PHẨM (BẤT KỂ TRẠNG THÁI) =====
       const allProducts = await this.productRepository.find({});
-      const matchingProducts = allProducts.filter(product => {
+      
+      const productsInSubcategory = allProducts.filter(product => {
         const productSubcategoryId = product.subcategoryId;
         return (
           productSubcategoryId?.toString() === objectId.toString() ||
-          productSubcategoryId?.toString() === id ||
           (productSubcategoryId instanceof MongoObjectId && productSubcategoryId.equals(objectId))
         );
       });
 
-      console.log(`🔍 Products in subcategory: ${matchingProducts.length}`);
-      
-      if (matchingProducts.length > 0) {
-        // ✅ Fix type-safe comparison for isActive
-        const activeProducts = matchingProducts.filter(p => {
-          if (typeof p.isActive === 'string') {
-            return p.isActive === 'true';
-          }
-          return p.isActive === true;
-        });
-        
-        if (activeProducts.length > 0) {
-          throw new BadRequestException(
-            `Không thể xóa danh mục con "${existingSubcategory.name}" vì còn ${activeProducts.length} sản phẩm đang hoạt động. Vui lòng xóa hoặc chuyển tất cả sản phẩm sang danh mục khác trước.`
-          );
-        }
+      console.log(`🔍 Products in subcategory: ${productsInSubcategory.length}`);
+
+      if (productsInSubcategory.length > 0) {
+        throw new BadRequestException(
+          `❌ Không thể xóa danh mục con "${existingSubcategory.name}" vì còn ${productsInSubcategory.length} sản phẩm.\n\n` +
+          `Vui lòng xóa hoặc chuyển tất cả sản phẩm sang danh mục khác trước.`
+        );
       }
 
-      // Always set to false when deleting
-      await this.subcategoryRepository.update(
-        { _id: objectId },
-        { 
-          isActive: false,
-          updatedAt: new Date()
+      console.log(`✅ No products found`);
+
+      // ===== BƯỚC 3: XÓA VĨNH VIỄN KHỎI DATABASE =====
+      await this.subcategoryRepository.delete({ _id: objectId });
+
+      console.log(`✅ Subcategory permanently deleted: "${existingSubcategory.name}"`);
+
+      // ===== BƯỚC 4: TRẢ VỀ THÔNG BÁO =====
+      return {
+        message: `Đã xóa vĩnh viễn danh mục con "${existingSubcategory.name}" khỏi hệ thống`,
+        deletedSubcategory: {
+          id: id,
+          name: existingSubcategory.name
         }
-      );
-
-      // Get updated subcategory
-      const updatedSubcategory = await this.subcategoryRepository.findOne({
-        where: { _id: objectId }
-      });
-
-      if (!updatedSubcategory) {
-        throw new BadRequestException(`Không thể lấy danh mục con đã cập nhật với ID: ${id}`);
-      }
-
-      console.log(`✅ Subcategory soft deleted: ${existingSubcategory.name}`);
-      return updatedSubcategory;
+      };
 
     } catch (error) {
-      console.error('❌ Error soft deleting subcategory:', error);
+      console.error('❌ Error hard deleting subcategory:', error);
       
       if (error instanceof BadRequestException) {
         throw error;
@@ -405,14 +379,6 @@ export class SubcategoryService {
     }
   }
 
-  async remove(id: string): Promise<void> {
-    if (!MongoObjectId.isValid(id)) {
-      throw new BadRequestException(`ID không hợp lệ: ${id}`);
-    }
-
-    const objectId = new MongoObjectId(id);
-    await this.subcategoryRepository.delete(objectId);
-  }
   // Lấy tất cả sản phẩm thuộc về một subcategory
   async getProductsBySubcategory(subcategoryId: string): Promise<Product[]> {
     if (!MongoObjectId.isValid(subcategoryId)) {
