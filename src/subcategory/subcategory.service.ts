@@ -19,16 +19,19 @@ export class SubcategoryService {
     private productRepository: MongoRepository<Product>,
   ) {}
 
+  // ✅ 1. CREATE - FIX MESSAGE VÀ VALIDATION
   async create(createSubcategoryDto: CreateSubcategoryDto): Promise<Subcategory> {
     try {
-      // Validate categoryId
+      console.log('🆕 Creating subcategory:', createSubcategoryDto);
+
+      // ===== BƯỚC 1: VALIDATE CATEGORY ID =====
       if (!MongoObjectId.isValid(createSubcategoryDto.categoryId)) {
         throw new BadRequestException(`ID danh mục cha không hợp lệ: ${createSubcategoryDto.categoryId}`);
       }
 
       const categoryObjectId = new MongoObjectId(createSubcategoryDto.categoryId);
       
-      // Check if parent category exists and is active
+      // ===== BƯỚC 2: KIỂM TRA CATEGORY CHA TỒN TẠI =====
       const category = await this.categoryRepository.findOne({
         where: { _id: categoryObjectId }
       });
@@ -37,33 +40,59 @@ export class SubcategoryService {
         throw new BadRequestException(`Không tìm thấy danh mục cha với ID ${createSubcategoryDto.categoryId}`);
       }
 
+      // ===== BƯỚC 3: KIỂM TRA CATEGORY CHA ĐANG HOẠT ĐỘNG =====
       const isActiveCategory = category.isActive === true || (typeof category.isActive === 'string' && category.isActive === 'true');
       if (!isActiveCategory) {
-        throw new BadRequestException(`Danh mục cha "${category.name}" đang không hoạt động. Vui lòng chọn danh mục khác.`);
+        throw new BadRequestException(
+          `❌ Không thể thêm danh mục con vào "${category.name}" vì danh mục cha đang tạm dừng.\n\n` +
+          `Vui lòng kích hoạt danh mục cha hoặc chọn danh mục khác.`
+        );
       }
 
-      // Check for duplicate name
+      // ===== BƯỚC 4: VALIDATE & TRIM NAME =====
+      const trimmedName = createSubcategoryDto.name.trim();
+      
+      if (!trimmedName) {
+        throw new BadRequestException('Tên danh mục con không được để trống');
+      }
+
+      if (trimmedName.length < 2) {
+        throw new BadRequestException('Tên danh mục con phải có ít nhất 2 ký tự');
+      }
+
+      if (trimmedName.length > 100) {
+        throw new BadRequestException('Tên danh mục con không được vượt quá 100 ký tự');
+      }
+
+      // ===== BƯỚC 5: KIỂM TRA TÊN TRÙNG LẶP =====
       const existingSubcategory = await this.subcategoryRepository.findOne({
-        where: { name: createSubcategoryDto.name }
+        where: { name: trimmedName }
       });
 
       if (existingSubcategory) {
-        throw new BadRequestException(`Danh mục con với tên "${createSubcategoryDto.name}" đã tồn tại`);
+        throw new BadRequestException(
+          `❌ Danh mục con với tên "${trimmedName}" đã tồn tại.\n\n` +
+          `Vui lòng chọn tên khác.`
+        );
       }
 
-      // ✅ Create new subcategory with isActive default = true
+      // ===== BƯỚC 6: TẠO SUBCATEGORY MỚI =====
       const newSubcategory = this.subcategoryRepository.create({
-        name: createSubcategoryDto.name.trim(),
+        name: trimmedName,
         categoryId: categoryObjectId,
-        isActive: true, // Explicitly set default value
+        isActive: true,
         createdAt: new Date(),
         updatedAt: new Date()
       });
 
-      return this.subcategoryRepository.save(newSubcategory);
+      const savedSubcategory = await this.subcategoryRepository.save(newSubcategory);
+
+      console.log(`✅ Subcategory created: "${trimmedName}" under category "${category.name}"`);
+
+      return savedSubcategory;
 
     } catch (error) {
-      console.error('Error creating subcategory:', error);
+      console.error('❌ Error creating subcategory:', error);
       
       if (error instanceof BadRequestException) {
         throw error;
@@ -117,19 +146,20 @@ export class SubcategoryService {
   }
 
   
+  // ✅ 2. UPDATE - FIX LOGIC KIỂM TRA CATEGORY
   async update(id: string, updateSubcategoryDto: UpdateSubcategoryDto): Promise<Subcategory> {
     try {
-      console.log('Updating subcategory with ID:', id);
+      console.log('✏️ Updating subcategory with ID:', id);
       console.log('Update data:', updateSubcategoryDto);
 
-      // Kiểm tra ObjectId hợp lệ
+      // ===== BƯỚC 1: VALIDATE ID =====
       if (!MongoObjectId.isValid(id)) {
         throw new BadRequestException(`ID danh mục con không hợp lệ: ${id}`);
       }
 
       const objectId = new MongoObjectId(id);
       
-      // Tìm subcategory hiện tại
+      // ===== BƯỚC 2: TÌM SUBCATEGORY HIỆN TẠI =====
       const existingSubcategory = await this.subcategoryRepository.findOne({
         where: { _id: objectId }
       });
@@ -138,9 +168,13 @@ export class SubcategoryService {
         throw new BadRequestException(`Không tìm thấy danh mục con với ID ${id}`);
       }
 
-      // Validate categoryId mới nếu có
+      console.log(`Found subcategory: "${existingSubcategory.name}"`);
+
+      // ===== BƯỚC 3: VALIDATE & CHECK CATEGORY MỚI (CHỈ KHI THỰC SỰ THAY ĐỔI) =====
       let categoryObjectId: MongoObjectId | undefined;
+      
       if (updateSubcategoryDto.categoryId) {
+        // Convert sang ObjectId
         if (typeof updateSubcategoryDto.categoryId === 'string') {
           if (!MongoObjectId.isValid(updateSubcategoryDto.categoryId)) {
             throw new BadRequestException(`ID danh mục cha không hợp lệ: ${updateSubcategoryDto.categoryId}`);
@@ -150,34 +184,74 @@ export class SubcategoryService {
           categoryObjectId = updateSubcategoryDto.categoryId;
         }
 
-        // Kiểm tra category cha có tồn tại không
-        const category = await this.categoryRepository.findOne({
-          where: { _id: categoryObjectId }
-        });
+        // ✅ CHỈ KIỂM TRA KHI THỰC SỰ THAY ĐỔI CATEGORY
+        const isCategoryChanged = categoryObjectId.toString() !== existingSubcategory.categoryId.toString();
+        
+        if (isCategoryChanged) {
+          console.log(`⚠️ Changing category from ${existingSubcategory.categoryId} to ${categoryObjectId}`);
 
-        if (!category) {
-          throw new BadRequestException(`Không tìm thấy danh mục cha với ID ${updateSubcategoryDto.categoryId}`);
-        }
+          // Kiểm tra category mới có tồn tại không
+          const newCategory = await this.categoryRepository.findOne({
+            where: { _id: categoryObjectId }
+          });
 
-        // Kiểm tra category cha có đang active không
-        const isActiveCategory = category.isActive === true || (typeof category.isActive === 'string' && category.isActive === 'true');
-        if (!isActiveCategory) {
-          throw new BadRequestException(`Danh mục cha "${category.name}" đang không hoạt động. Vui lòng chọn danh mục khác.`);
+          if (!newCategory) {
+            throw new BadRequestException(`Không tìm thấy danh mục cha với ID ${updateSubcategoryDto.categoryId}`);
+          }
+
+          // Kiểm tra category mới có đang active không
+          const isActiveCategory = newCategory.isActive === true || (typeof newCategory.isActive === 'string' && newCategory.isActive === 'true');
+          if (!isActiveCategory) {
+            throw new BadRequestException(
+              `❌ Không thể chuyển sang danh mục cha "${newCategory.name}" vì danh mục này đang tạm dừng.\n\n` +
+              `Vui lòng kích hoạt danh mục cha hoặc chọn danh mục khác.`
+            );
+          }
+
+          console.log(`✅ New category "${newCategory.name}" is active`);
+        } else {
+          console.log(`✅ Category ID unchanged, skipping validation`);
+          // ✅ Nếu không đổi category, không set lại categoryObjectId
+          categoryObjectId = undefined;
         }
       }
 
-      // Kiểm tra tên trùng lặp nếu có thay đổi tên
-      if (updateSubcategoryDto.name && updateSubcategoryDto.name !== existingSubcategory.name) {
-        const duplicateSubcategory = await this.subcategoryRepository.findOne({
-          where: { name: updateSubcategoryDto.name }
-        });
+      // ===== BƯỚC 4: VALIDATE & CHECK TÊN TRÙNG LẶP (CHỈ KHI THỰC SỰ THAY ĐỔI) =====
+      if (updateSubcategoryDto.name) {
+        const trimmedName = updateSubcategoryDto.name.trim();
+        
+        if (!trimmedName) {
+          throw new BadRequestException('Tên danh mục con không được để trống');
+        }
 
-        if (duplicateSubcategory && duplicateSubcategory._id.toString() !== id) {
-          throw new BadRequestException(`Danh mục con với tên "${updateSubcategoryDto.name}" đã tồn tại`);
+        if (trimmedName.length < 2) {
+          throw new BadRequestException('Tên danh mục con phải có ít nhất 2 ký tự');
+        }
+
+        if (trimmedName.length > 100) {
+          throw new BadRequestException('Tên danh mục con không được vượt quá 100 ký tự');
+        }
+
+        // ✅ CHỈ KIỂM TRA KHI THỰC SỰ THAY ĐỔI TÊN
+        if (trimmedName !== existingSubcategory.name) {
+          console.log(`⚠️ Changing name from "${existingSubcategory.name}" to "${trimmedName}"`);
+
+          const duplicateSubcategory = await this.subcategoryRepository.findOne({
+            where: { name: trimmedName }
+          });
+
+          if (duplicateSubcategory && duplicateSubcategory._id.toString() !== id) {
+            throw new BadRequestException(
+              `❌ Danh mục con với tên "${trimmedName}" đã tồn tại.\n\n` +
+              `Vui lòng chọn tên khác.`
+            );
+          }
+        } else {
+          console.log(`✅ Name unchanged, skipping duplicate check`);
         }
       }
 
-      // Chuẩn bị dữ liệu cập nhật
+      // ===== BƯỚC 5: CHUẨN BỊ DỮ LIỆU CẬP NHẬT =====
       const updateData: any = {
         updatedAt: new Date()
       };
@@ -186,18 +260,31 @@ export class SubcategoryService {
         updateData.name = updateSubcategoryDto.name.trim();
       }
 
+      // ✅ CHỈ CẬP NHẬT CATEGORY NẾU THỰC SỰ THAY ĐỔI
       if (categoryObjectId) {
         updateData.categoryId = categoryObjectId;
       }
 
-      // Cập nhật subcategory
-      await this.subcategoryRepository.update(objectId, updateData);
+      console.log('Update data prepared:', updateData);
 
-      // Trả về subcategory đã cập nhật
-      return this.findOne(id);
+      // ===== BƯỚC 6: CẬP NHẬT SUBCATEGORY =====
+      await this.subcategoryRepository.update({ _id: objectId }, updateData);
+
+      // ===== BƯỚC 7: TRẢ VỀ SUBCATEGORY ĐÃ CẬP NHẬT =====
+      const updatedSubcategory = await this.subcategoryRepository.findOne({
+        where: { _id: objectId }
+      });
+
+      if (!updatedSubcategory) {
+        throw new BadRequestException(`Không thể lấy danh mục con đã cập nhật với ID: ${id}`);
+      }
+
+      console.log(`✅ Subcategory updated successfully`);
+
+      return updatedSubcategory;
 
     } catch (error) {
-      console.error('Error updating subcategory:', error);
+      console.error('❌ Error updating subcategory:', error);
       
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;

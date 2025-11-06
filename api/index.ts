@@ -3,34 +3,54 @@ import { createNestServer } from '../src/bootstrap';
 let cached: any;
 
 export default async function handler(req: any, res: any) {
-    console.log('🔍 Original URL:', req.url, req.method);
-    
-    // ✅ Xử lý /api prefix
-    if (req.url.startsWith('/api/')) {
-        req.url = req.url.replace('/api/', '/');
-        console.log('🔄 Rewritten /api/* to:', req.url);
-    } else if (req.url === '/api') {
-        req.url = '/';
-        console.log('🔄 Rewritten /api to:', req.url);
-    }
+    console.log('🔍 Incoming Request:', {
+        method: req.method,
+        url: req.url,
+        originalUrl: req.originalUrl
+    });
+
+    // ✅ Không cần rewrite URL nữa, để NestJS xử lý trực tiếp
+    // NestJS sẽ tự động handle với global prefix 'api'
 
     if (!cached) {
         console.log('🚀 Creating NestJS server...');
-        cached = await createNestServer();
-        console.log('✅ NestJS server created');
+        try {
+            cached = await createNestServer();
+            console.log('✅ NestJS server created successfully');
+        } catch (error) {
+            console.error('❌ Failed to create NestJS server:', error);
+            return res.status(500).json({ 
+                error: 'Failed to initialize server',
+                details: error.message 
+            });
+        }
     }
 
-    console.log('📤 Final URL sent to NestJS:', req.method, req.url);
+    console.log('📤 Processing request...');
     
-    // ✅ Thêm headers để debug
-    res.setHeader('X-Debug-URL', req.url);
-    res.setHeader('X-Debug-Method', req.method);
-    
-    // ✅ Đảm bảo return đúng cách
     try {
+        // ✅ Set CORS headers
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+        res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+
+        // ✅ Handle OPTIONS request
+        if (req.method === 'OPTIONS') {
+            res.status(200).end();
+            return;
+        }
+
         await cached(req, res);
+        console.log('✅ Request processed successfully');
     } catch (error) {
         console.error('❌ Handler error:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        if (!res.headersSent) {
+            res.status(500).json({ 
+                error: 'Internal Server Error',
+                message: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            });
+        }
     }
 }
