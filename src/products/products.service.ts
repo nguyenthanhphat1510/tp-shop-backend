@@ -1365,4 +1365,81 @@ async findOneVariant(variantId: string): Promise<{
       throw new BadRequestException(`❌ Lỗi xóa variant: ${error.message}`);
     }
   }
+
+  /**
+   * 📦 LẤY TẤT CẢ SẢN PHẨM KHÔNG GIẢM GIÁ
+   * 
+   * @description Trả về danh sách sản phẩm mà TẤT CẢ variants đều KHÔNG đang giảm giá
+   * 
+   * @returns Promise<Product[]> - Danh sách sản phẩm (bao gồm variants không sale)
+   * 
+   * @example Response:
+   * [
+   *   {
+   *     _id: "...",
+   *     name: "iPhone 15",
+   *     variants: [
+   *       { storage: "128GB", color: "Đen", price: 20000000, isOnSale: false, ... },
+   *       { storage: "256GB", color: "Trắng", price: 23000000, isOnSale: false, ... }
+   *     ]
+   *   }
+   * ]
+   */
+  async findProductsNotOnSale(): Promise<Product[]> {
+    try {
+      console.log('📦 Finding all products WITHOUT discount');
+
+      // ===== BƯỚC 1: LẤY TẤT CẢ SẢN PHẨM ACTIVE =====
+      const allProducts = await this.productsRepository.find({
+        where: { isActive: true },
+        order: { createdAt: 'DESC' }
+      });
+
+      console.log(`📊 Found ${allProducts.length} active products`);
+
+      // ===== BƯỚC 2: LỌC SẢN PHẨM CÓ ÍT NHẤT 1 VARIANT KHÔNG SALE =====
+      const productsNotOnSale: Product[] = [];
+
+      for (const product of allProducts) {
+        // Lấy TẤT CẢ variants của product này
+        const allVariants = await this.variantsRepository.find({
+          where: { 
+            productId: product._id,
+            isActive: true 
+          },
+          order: { price: 'ASC' }
+        });
+
+        // Lọc chỉ lấy variants KHÔNG đang sale
+        const nonSaleVariants = allVariants.filter(v => !v.isOnSale || v.discountPercent === 0);
+
+        // ✅ Nếu có ít nhất 1 variant không sale → thêm product vào kết quả
+        if (nonSaleVariants.length > 0) {
+          const productWithVariants: Product = {
+            ...product,
+            variants: nonSaleVariants.map(v => ({
+              _id: v._id,
+              storage: v.storage,
+              color: v.color,
+              price: v.price,
+              stock: v.stock,
+              images: v.imageUrls,
+              isActive: v.isActive,
+              discountPercent: 0,        // ✅ Luôn là 0 vì không sale
+              isOnSale: false,           // ✅ Luôn là false
+              finalPrice: v.price,       // ✅ Giá cuối = giá gốc
+              savedAmount: 0             // ✅ Không tiết kiệm được gì
+            }))
+          } as any;
+
+          productsNotOnSale.push(productWithVariants);
+        }
+      }
+      return productsNotOnSale;
+
+    } catch (error) {
+      console.error('❌ Error finding non-sale products:', error);
+      throw new BadRequestException(`Lỗi lấy danh sách sản phẩm không giảm giá: ${error.message}`);
+    }
+  }
 }

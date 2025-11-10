@@ -172,6 +172,35 @@ export class ProductsController {
     }
   }
 
+  @Get('not-on-sale')
+  async getProductsNotOnSale() {
+    try {
+      console.log('📦 [GET] /products/not-on-sale - Request received');
+
+      const products = await this.productsService.findProductsNotOnSale();
+
+      console.log(`✅ Returning ${products.length} products not on sale`);
+
+      return {
+        success: true,
+        message: 'Lấy danh sách sản phẩm không giảm giá thành công',
+        data: products,
+        total: products.length,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('❌ Error in getProductsNotOnSale:', error);
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException(`Lỗi lấy sản phẩm không giảm giá: ${error.message}`);
+    }
+  }
+
+
   // ✅ GET ONE VARIANT BY ID - Move BEFORE :id route to avoid conflict
   @Get('variants/:variantId')
   async findOneVariant(@Param('variantId') variantId: string) {
@@ -218,39 +247,39 @@ export class ProductsController {
       console.error('❌ Error in findOne:', error);
       throw error;
     }
-  } 
-
-@Patch('variants/:variantId')
-@UseInterceptors(FilesInterceptor('images', 5))
-async updateVariant(
-  @Param('variantId') variantId: string,
-  @Body() updateData: {
-    storage?: string;
-    color?: string;
-    price?: number;
-    stock?: number;
-    discountPercent?: number;
-    isActive?: boolean;
-  },
-  @UploadedFiles() files?: Express.Multer.File[]
-) {
-  try {
-    const updatedVariant = await this.productsService.updateVariant(
-      variantId,
-      updateData,
-      files
-    );
-
-    return {
-      success: true,
-      message: 'Cập nhật variant thành công',
-      data: updatedVariant
-    };
-  } catch (error) {
-    throw error;
   }
-}
-  
+
+  @Patch('variants/:variantId')
+  @UseInterceptors(FilesInterceptor('images', 5))
+  async updateVariant(
+    @Param('variantId') variantId: string,
+    @Body() updateData: {
+      storage?: string;
+      color?: string;
+      price?: number;
+      stock?: number;
+      discountPercent?: number;
+      isActive?: boolean;
+    },
+    @UploadedFiles() files?: Express.Multer.File[]
+  ) {
+    try {
+      const updatedVariant = await this.productsService.updateVariant(
+        variantId,
+        updateData,
+        files
+      );
+
+      return {
+        success: true,
+        message: 'Cập nhật variant thành công',
+        data: updatedVariant
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
   // ✅ TOGGLE STATUS CHO 1 VARIANT
   @Patch('variants/:variantId/toggle')
   async toggleVariantStatus(@Param('variantId') variantId: string) {
@@ -361,7 +390,7 @@ async updateVariant(
   async deleteVariant(@Param('variantId') variantId: string) {
     try {
       const result = await this.productsService.deleteVariant(variantId);
-      
+
       return {
         success: true,
         message: result.message,
@@ -372,5 +401,5 @@ async updateVariant(
       throw error;
     }
   }
-
+  
 }
