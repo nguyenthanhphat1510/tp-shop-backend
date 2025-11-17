@@ -8,10 +8,6 @@ export class ShippingInfoDto {
   fullName: string;
 
   @IsNotEmpty()
-  @IsEmail()
-  email: string;
-
-  @IsNotEmpty()
   @IsString()
   phone: string;
 
@@ -19,17 +15,6 @@ export class ShippingInfoDto {
   @IsString()
   address: string;
 
-  @IsNotEmpty()
-  @IsString()
-  city: string;
-
-  @IsNotEmpty()
-  @IsString()
-  district: string;
-
-  @IsNotEmpty()
-  @IsString()
-  ward: string;
 }
 
 export class OrderItemDto {

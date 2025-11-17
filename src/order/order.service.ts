@@ -106,7 +106,7 @@ export class OrderService {
             const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
             
             // VÍ DỤ: Hồ Chí Minh = free ship (0), tỉnh khác = 30,000
-            const shippingFee = this.calculateShippingFee(createOrderDto.shippingInfo.city);
+            const shippingFee = 30000
             
             // VÍ DỤ: 75,000,000 + 0 = 75,000,000
             const total = subtotal + shippingFee;
@@ -303,30 +303,7 @@ export class OrderService {
      * - "Hà Nội" → 0 VNĐ (free ship)  
      * - "Đà Nẵng" → 30,000 VNĐ
      */
-    private calculateShippingFee(city: string): number {
-        const freeShippingCities = [
-            'hồ chí minh',
-            'hà nội',
-            'tp. hồ chí minh',
-            'thành phố hồ chí minh'
-        ];
 
-        const normalizedCity = city.trim().toLowerCase();
-        const isFreeShipping = freeShippingCities.some(freeCity =>
-            normalizedCity.includes(freeCity)
-        );
-
-        const fee = isFreeShipping ? 0 : 30000;
-
-        console.log(`🚚 Shipping fee calculation:`, {
-            inputCity: city,                    // "Hồ Chí Minh"
-            normalizedCity,                     // "hồ chí minh"
-            isFreeShipping,                     // true
-            fee: fee.toLocaleString('vi-VN')    // "0"
-        });
-
-        return fee;
-    }
 
     /**
      * 🔢 TẠO MÃ ĐƠN HÀNG DUY NHẤT
@@ -357,27 +334,71 @@ export class OrderService {
 
     // 📋 Lấy tất cả đơn hàng (Admin)
     async findAll(): Promise<Order[]> {
-        return await this.orderRepository.find({
-            order: { createdAt: 'DESC' }
+                const orders = await this.orderRepository.find({
+        order: { createdAt: 'DESC' }
+    });
+
+    // ✅ Load orderItems cho mỗi order
+    for (const order of orders) {
+        const orderItems = await this.orderItemRepository.find({
+            where: { orderId: order._id }
         });
+        (order as any).orderItems = orderItems;
     }
 
-    // 🔍 Lấy chi tiết đơn hàng
-    async findOne(id: string, userId?: string): Promise<Order> {
-        const where: any = { _id: new ObjectId(id) };
+    return orders;
+    }
+
+ // 🔍 Lấy chi tiết đơn hàng (Phiên bản log đơn giản)
+async findOne(id: string, userId?: string): Promise<Order> {
+    
+    // Log thẳng ID và UserID như bạn yêu cầu
+    console.log(`🔍 OrderService.findOne called with id: ${id}, userId: ${userId}`);
+
+    // ===== PHẦN VALIDATION VẪN RẤT QUAN TRỌNG =====
+    // 1. Kiểm tra id có tồn tại và là string không
+    if (!id || typeof id !== 'string') {
+        throw new BadRequestException('Order ID không hợp lệ');
+    }
+
+    // 2. Làm sạch ID (loại bỏ khoảng trắng thừa)
+    const trimmedId = id.trim();
+
+    // 3. Kiểm tra định dạng ObjectId (24 ký tự hex)
+    if (!/^[0-9a-fA-F]{24}$/.test(trimmedId)) {
+        throw new BadRequestException(`Order ID không đúng định dạng: ${trimmedId}`);
+    }
+    // ===== HẾT PHẦN VALIDATION =====
+
+    try {
+        // Chuyển đổi ID sang ObjectId
+        const objectId = new ObjectId(trimmedId);
+        
+        // Chuẩn bị câu truy vấn
+        const where: any = { _id: objectId };
+        
+        // Nếu có userId, thêm vào câu truy vấn để bảo mật
         if (userId) {
             where.userId = new ObjectId(userId);
         }
 
+        // Tìm đơn hàng
         const order = await this.orderRepository.findOne({ where });
 
+        // Nếu không tìm thấy, báo lỗi
         if (!order) {
             throw new NotFoundException('Không tìm thấy đơn hàng');
         }
 
+        // Trả về đơn hàng nếu tìm thấy
         return order;
-    }
 
+    } catch (error) {
+        // Bắt các lỗi khác (ví dụ: lỗi database) và ném ra
+        console.error(`❌ Error in findOne (id: ${trimmedId}):`, error.message);
+        throw error;
+    }
+}
     // 🔍 Lấy đơn hàng với items
     async findOneWithItems(id: string, userId?: string): Promise<Order> {
         const order = await this.findOne(id, userId);

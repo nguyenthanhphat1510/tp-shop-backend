@@ -37,12 +37,8 @@ export class Order {
   @Column()
   shippingInfo: {
     fullName: string;           // Họ tên người nhận
-    email: string;              // Email người nhận
     phone: string;              // SĐT người nhận
     address: string;            // Địa chỉ chi tiết
-    city: string;               // Thành phố
-    district: string;           // Quận/Huyện
-    ward: string;               // Phường/Xã
   };
 
   // ===== THÔNG TIN THANH TOÁN =====

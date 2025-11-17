@@ -28,72 +28,80 @@ export class PaymentController {
      * INPUT: { orderId, amount, orderInfo? }
      * OUTPUT: { success, data: { payUrl, orderId, ... } }
      */
-    @Post('momo/create')
-    async createMomoPayment(@Body() createPaymentDto: {
-        orderId: string;    // ID đơn hàng đã tồn tại
-        amount: number;     // Số tiền cần thanh toán (VNĐ)
-        orderInfo?: string; // Mô tả thanh toán (optional)
-    }) {
-        try {
-            const { orderId, amount, orderInfo } = createPaymentDto;
+   @Post('momo/create')
+async createMomoPayment(@Body() createPaymentDto: {
+    orderId: string;
+    amount: number;
+    orderInfo?: string;
+}) {
+    try {
+        // ✅ DESTRUCTURE ngay từ đầu để đảm bảo lấy đúng giá trị
+        const { orderId, amount, orderInfo } = createPaymentDto;
 
-            console.log('🏪 Creating MoMo payment for order:', orderId);
+        // ✅ LOG ĐỂ DEBUG
+        console.log('🏪 Creating MoMo payment');
+        console.log('  - orderId:', orderId);
+        console.log('  - orderId type:', typeof orderId);
+        console.log('  - amount:', amount);
+        console.log('  - orderInfo:', orderInfo);
 
-            // ===== BƯỚC 1: KIỂM TRA ĐƠN HÀNG CÓ TỒN TẠI KHÔNG =====
-            const order = await this.orderService.findOne(orderId);
-            if (!order) {
-                throw new BadRequestException('Đơn hàng không tồn tại');
-            }
-
-            // ===== BƯỚC 2: KIỂM TRA ĐƠN HÀNG CHƯA ĐƯỢC THANH TOÁN =====
-            if (order.paymentStatus === PaymentStatus.PAID) {
-                // Nếu đã thanh toán rồi thì không cho thanh toán lại
-                throw new BadRequestException('Đơn hàng đã được thanh toán');
-            }
-
-            // ===== BƯỚC 3: KIỂM TRA TRẠNG THÁI ĐƠN HÀNG HỢP LỆ =====
-            // Chỉ cho phép thanh toán khi order ở trạng thái PENDING hoặc CONFIRMED
-            if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.CONFIRMED) {
-                throw new BadRequestException('Đơn hàng không thể thanh toán ở trạng thái hiện tại');
-            }
-
-            // ===== BƯỚC 4: CẬP NHẬT PAYMENT METHOD THÀNH MOMO =====
-            // Chuyển từ COD sang MoMo
-            // await this.orderService.update(orderId, {
-            //     paymentMethod: PaymentMethod.MOMO
-            // });
-
-            // ===== BƯỚC 5: TẠO PAYMENT LINK VỚI MOMO =====
-            const momoResponse = await this.momoService.createPayment(
-                orderId,  // Mã đơn hàng
-                amount,   // Số tiền
-                orderInfo || `Thanh toán đơn hàng ${order.orderNumber}` // Mô tả
-            );
-
-            console.log('📤 MoMo response:', momoResponse);
-
-            // ===== BƯỚC 6: TRA VỀ KẾT QUẢ =====
-            if (momoResponse.success) {
-                return {
-                    success: true,
-                    message: 'Tạo thanh toán thành công',
-                    data: {
-                        payUrl: momoResponse.payUrl,        // 🔗 Link để user thanh toán
-                        orderId: orderId,                   // ID đơn hàng
-                        orderNumber: order.orderNumber,     // Mã đơn hàng (ORD-...)
-                        amount: amount                      // Số tiền
-                    }
-                };
-            } else {
-                throw new BadRequestException(`Lỗi MoMo: ${momoResponse.message}`);
-            }
-
-        } catch (error) {
-            console.error('❌ Create MoMo payment error:', error);
-            throw new BadRequestException(error.message || 'Không thể tạo thanh toán');
+        // ✅ VALIDATE orderId là string
+        if (!orderId || typeof orderId !== 'string') {
+            throw new BadRequestException('Order ID phải là string');
         }
-    }
 
+        // ===== BƯỚC 1: KIỂM TRA ĐƠN HÀNG =====
+        console.log('🔍 Calling orderService.findOne with orderId:', orderId);
+        
+        // ✅ CHỈ TRUYỀN orderId (string), KHÔNG TRUYỀN cả object
+        const order = await this.orderService.findOne(orderId);
+        
+        if (!order) {
+            throw new BadRequestException('Đơn hàng không tồn tại');
+        }
+
+        console.log('✅ Order found:', order._id.toString());
+
+        // ===== BƯỚC 2: KIỂM TRA PAYMENT STATUS =====
+        if (order.paymentStatus === PaymentStatus.PAID) {
+            throw new BadRequestException('Đơn hàng đã được thanh toán');
+        }
+
+        // ===== BƯỚC 3: KIỂM TRA ORDER STATUS =====
+        if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.CONFIRMED) {
+            throw new BadRequestException('Đơn hàng không thể thanh toán ở trạng thái hiện tại');
+        }
+
+        // ===== BƯỚC 4: TẠO MOMO PAYMENT =====
+        const momoResponse = await this.momoService.createPayment(
+            orderId,
+            amount,
+            orderInfo || `Thanh toán đơn hàng ${order.orderNumber}`
+        );
+
+        console.log('📤 MoMo response:', momoResponse);
+
+        // ===== BƯỚC 5: TRẢ VỀ KẾT QUẢ =====
+        if (momoResponse.success) {
+            return {
+                success: true,
+                message: 'Tạo thanh toán thành công',
+                data: {
+                    payUrl: momoResponse.payUrl,
+                    orderId: orderId,
+                    orderNumber: order.orderNumber,
+                    amount: amount
+                }
+            };
+        } else {
+            throw new BadRequestException(`Lỗi MoMo: ${momoResponse.message}`);
+        }
+
+    } catch (error) {
+        console.error('❌ Create MoMo payment error:', error);
+        throw new BadRequestException(error.message || 'Không thể tạo thanh toán');
+    }
+}
     /**
      * 🔄 CALLBACK TỪ MOMO (USER REDIRECT)
      * 

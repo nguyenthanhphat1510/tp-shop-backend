@@ -17,12 +17,7 @@ export class Product {
     @Column('objectid')
     subcategoryId: ObjectId;
 
-      // ✅ THÊM 2 FIELD NÀY (CƠ BẢN)
-    @Column({ type: 'array', default: [] })
-    embedding: number[]; // Vector từ Gemini
 
-    @Column({ default: '' })
-    searchText: string; // Text dùng để tạo vector
 
     @Column({ default: 0 })
     ratings_average: number; // Rating trung bình

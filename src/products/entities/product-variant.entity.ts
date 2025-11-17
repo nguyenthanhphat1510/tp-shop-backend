@@ -29,9 +29,12 @@ export class ProductVariant {
     @Column({ default: false })
     isOnSale: boolean; // Có đang giảm giá không
 
-     // ✅ VECTOR EMBEDDING FIELD
-    @Column({ type: 'array', default: [] })
-    embedding: number[]; // Vector embedding from Gemini
+         // ✅ THÊM 2 FIELD NÀY (CƠ BẢN)
+       @Column({ type: 'array', default: [] })
+       embedding: number[]; // Vector từ Gemini
+   
+       @Column({ default: '' })
+       searchText: string; // Text dùng để tạo vector
 
     @Column()
     stock: number;
