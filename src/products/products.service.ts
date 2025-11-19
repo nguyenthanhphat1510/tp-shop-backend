@@ -103,15 +103,6 @@ export class ProductsService {
       // Tạo instance và lưu vào database
       const newProduct = this.productsRepository.create(productData);
 
-      // ❌ COMMENT PHẦN TẠO VECTOR (VÌ QUOTA GEMINI HẾT)
-      // console.log('🧠 Đang tạo vector cho sản phẩm...');
-      // Tạo text để search
-      // newProduct.searchText = newProduct.createSearchText();
-      // console.log(`📝 Text để tạo vector: "${newProduct.searchText}"`);
-
-      // Tạo vector từ text
-      // newProduct.embedding = await this.geminiService.createEmbedding(newProduct.searchText);
-      // console.log(`✅ Tạo được vector có ${newProduct.embedding.length} chiều`);
 
       const savedProduct = await this.productsRepository.save(newProduct);
 
@@ -127,13 +118,12 @@ export class ProductsService {
 
       const createdVariants: ProductVariant[] = [];
 
-      // Duyệt qua từng variant trong danh sách
       for (let i = 0; i < createProductDto.variants.length; i++) {
         const variantDto = createProductDto.variants[i];
 
         console.log(`🔄 Đang tạo variant ${i + 1}/${createProductDto.variants.length}:`, variantDto);
 
-        // ✅ VALIDATE VARIANT DATA TRƯỚC KHI TẠO SKU
+        // ✅ VALIDATE VARIANT DATA
         if (!variantDto) {
           throw new BadRequestException(`❌ Variant ${i} is undefined`);
         }
@@ -154,88 +144,95 @@ export class ProductsService {
           throw new BadRequestException(`❌ Variant ${i}: stock must be 0 or greater`);
         }
 
-        console.log(`✅ Variant ${i} validation passed:`, {
-          storage: variantDto.storage,
-          color: variantDto.color,
-          price: variantDto.price,
-          stock: variantDto.stock
+        // ✅ GENERATE SKU
+        const productNameSafe = createProductDto.name.toString().trim().toUpperCase().replace(/\s+/g, '');
+        const storageSafe = variantDto.storage.toString().trim().toUpperCase().replace(/\s+/g, '');
+        const colorSafe = variantDto.color.toString().trim().toUpperCase().replace(/\s+/g, '');
+        const sku = `${productNameSafe}-${storageSafe}-${colorSafe}`;
+
+        console.log(`🏷️ Generated SKU: ${sku}`);
+
+        // Kiểm tra SKU đã tồn tại chưa
+        const existingSku = await this.variantsRepository.findOne({
+            where: { sku }
         });
 
-        // ✅ SAFE SKU GENERATION
-        try {
-          const productNameSafe = createProductDto.name.toString().trim().toUpperCase().replace(/\s+/g, '');
-          const storageSafe = variantDto.storage.toString().trim().toUpperCase().replace(/\s+/g, '');
-          const colorSafe = variantDto.color.toString().trim().toUpperCase().replace(/\s+/g, '');
-
-          const sku = `${productNameSafe}-${storageSafe}-${colorSafe}`;
-
-          console.log(`🏷️ Generated SKU: ${sku}`);
-
-          // Kiểm tra SKU đã tồn tại chưa
-          const existingSku = await this.variantsRepository.findOne({
-            where: { sku }
-          });
-
-          if (existingSku) {
+        if (existingSku) {
             throw new BadRequestException(`❌ SKU "${sku}" đã tồn tại. Variant này đã được tạo trước đó.`);
-          }
+        }
 
-          // 📸 UPLOAD ẢNH CHO VARIANT NẦY
-          /*
-           * Files structure từ frontend:
-           * {
-           *   'variant_0_images': [file1, file2], // Ảnh cho variant đầu tiên
-           *   'variant_1_images': [file3, file4], // Ảnh cho variant thứ hai
-           *   'variant_2_images': [file5, file6]  // Ảnh cho variant thứ ba
-           * }
-           */
-          let variantImageUrls: string[] = [];
-          let variantImagePublicIds: string[] = [];
+        // ✅ UPLOAD ẢNH CHO VARIANT
+        let variantImageUrls: string[] = [];
+        let variantImagePublicIds: string[] = [];
 
-          // Lấy files cho variant thứ i
-          const variantFiles = files?.[`variant_${i}_images`];
+        const variantFiles = files?.[`variant_${i}_images`];
 
-          if (variantFiles && variantFiles.length > 0) {
+        if (variantFiles && variantFiles.length > 0) {
             console.log(`📸 Đang upload ${variantFiles.length} ảnh cho variant ${variantDto.color}`);
 
-            // Upload từng file lên Cloudinary
             for (const file of variantFiles) {
-              const uploadResult = await this.cloudinaryService.uploadImage(
-                file,
-                `tpshop/products/${savedProduct._id}/variants/${variantDto.color}` // Folder path
-              );
-              variantImageUrls.push(uploadResult.secure_url);     // URL để hiển thị
-              variantImagePublicIds.push(uploadResult.public_id); // ID để xóa sau này
+                const uploadResult = await this.cloudinaryService.uploadImage(
+                    file,
+                    `tpshop/products/${savedProduct._id}/variants/${variantDto.color}`
+                );
+                variantImageUrls.push(uploadResult.secure_url);
+                variantImagePublicIds.push(uploadResult.public_id);
             }
 
             console.log(`✅ Đã upload thành công ${variantImageUrls.length} ảnh`);
-          } else {
+        } else {
             console.log(`ℹ️ Không có ảnh nào được upload cho variant ${variantDto.color}`);
-          }
-
-          // 💾 TẠO VÀ LUU VARIANT VÀO DATABASE
-          const variantData = {
-            productId: savedProduct._id,              // Link tới sản phẩm chính
-            sku,                                      // Mã SKU unique
-            storage: variantDto.storage,              // Dung lượng: "128GB"
-            color: variantDto.color,                  // Màu sắc: "Đen"
-            price: variantDto.price,                  // Giá: 22000000
-            stock: variantDto.stock,                  // Số lượng tồn: 50
-            imageUrls: variantImageUrls,              // Danh sách URL ảnh
-            imagePublicIds: variantImagePublicIds,    // Danh sách Public ID
-            isActive: variantDto.isActive ?? true,    // Trạng thái (mặc định true)
-            sold: 0                                   // Số lượng đã bán (mặc định 0)
-          };
-
-          const newVariant = this.variantsRepository.create(variantData);
-          const savedVariant = await this.variantsRepository.save(newVariant);
-          createdVariants.push(savedVariant);
-
-          console.log(`✅ Đã tạo variant: ${savedVariant.sku} với ${savedVariant.imageUrls.length} ảnh`);
-        } catch (error) {
-          console.error(`❌ Error creating SKU for variant ${i}:`, error);
-          throw new BadRequestException(`❌ Lỗi tạo SKU cho variant ${i}: ${error.message}`);
         }
+
+        // ===== ✅ TẠO EMBEDDING CHO VARIANT =====
+        let variantEmbedding: number[] = [];
+        let variantSearchText = '';
+
+        try {
+            console.log('🧠 Đang tạo embedding cho variant...');
+            
+            // BƯỚC 1: Tạo text search kết hợp Product + Variant
+            variantSearchText = `${savedProduct.name} ${savedProduct.description} ${variantDto.storage} ${variantDto.color}`.toLowerCase().trim();
+            
+            console.log(`📝 Text để tạo vector: "${variantSearchText}"`);
+
+            // BƯỚC 2: Gọi Gemini để tạo vector
+            variantEmbedding = await this.geminiService.createEmbedding(variantSearchText);
+            
+            console.log(`✅ Tạo được vector có ${variantEmbedding.length} chiều`);
+            
+        } catch (embeddingError) {
+            console.error('⚠️ Lỗi tạo embedding:', embeddingError.message);
+            // ✅ KHÔNG throw error, tiếp tục tạo variant nhưng không có embedding
+            variantEmbedding = [];
+            variantSearchText = '';
+        }
+
+        // ===== 💾 TẠO VÀ LƯU VARIANT VÀO DATABASE =====
+        const variantData = {
+            productId: savedProduct._id,
+            sku,
+            storage: variantDto.storage,
+            color: variantDto.color,
+            price: variantDto.price,
+            stock: variantDto.stock,
+            imageUrls: variantImageUrls,
+            imagePublicIds: variantImagePublicIds,
+            isActive: variantDto.isActive ?? true,
+            sold: 0,
+            
+            // ✅ LƯU EMBEDDING VÀ SEARCH TEXT
+            embedding: variantEmbedding,
+            searchText: variantSearchText
+        };
+
+        const newVariant = this.variantsRepository.create(variantData);
+        const savedVariant = await this.variantsRepository.save(newVariant);
+        createdVariants.push(savedVariant);
+
+        console.log(`✅ Đã tạo variant: ${savedVariant.sku}`);
+        console.log(`   - Có ${savedVariant.imageUrls.length} ảnh`);
+        console.log(`   - Embedding: ${savedVariant.embedding.length > 0 ? `${savedVariant.embedding.length} chiều` : 'Không có'}`);
       }
 
       // 📊 THỐNG KÊ KẾT QUẢ
@@ -853,109 +850,123 @@ async findOneVariant(variantId: string): Promise<{
     }
   }
 
-  /**
-   * 🔍 SEMANTIC SEARCH USING VECTOR SIMILARITY
-   * ❌ COMMENT VÌ QUOTA GEMINI HẾT
-   */
-  // async searchByVector(searchQuery: string): Promise<{
-  //   products: Array<{
-  //     product: Product;
-  //     variants: ProductVariant[];
-  //     similarity: number;
-  //   }>;
-  //   searchQuery: string;
-  //   totalFound: number;
-  // }> {
-  //   try {
-  //     console.log(`🔍 Searching for: "${searchQuery}"`);
+  /* * 🔍 SEMANTIC SEARCH USING VECTOR SIMILARITY
+    * ❌ COMMENT VÌ QUOTA GEMINI HẾT
+    */
+ /**
+ * 🔍 SEMANTIC SEARCH THEO VARIANT (KHÔNG PHẢI PRODUCT)
+ */
+async searchByVector(searchQuery: string): Promise<{
+    variants: Array<{
+        variant: ProductVariant;
+        product: Product;
+        similarity: number;
+    }>;
+    searchQuery: string;
+    totalFound: number;
+}> {
+    try {
+        console.log(`🔍 Searching for: "${searchQuery}"`);
 
-  //     // STEP 1: Create vector for search query
-  //     console.log('🧠 Creating embedding for search query...');
-  //     const searchVector = await this.geminiService.createEmbedding(searchQuery);
-  //     console.log(`✅ Search vector has ${searchVector.length} dimensions`);
+        // ===== STEP 1: TẠO VECTOR CHO TỪ KHÓA TÌM KIẾM =====
+        console.log('🧠 Creating embedding for search query...');
+        const searchVector = await this.geminiService.createEmbedding(searchQuery);
+        console.log(`✅ Search vector has ${searchVector.length} dimensions`);
 
-  //     // STEP 2: Get all products with embeddings
-  //     console.log('📊 Getting all products with embeddings...');
-  //     const allProducts = await this.productsRepository.find({
-  //       where: {
-  //         isActive: true,
-  //         embedding: { $exists: true, $ne: [] }
-  //       }
-  //     });
-  //     console.log(`📦 Found ${allProducts.length} products with embeddings`);
+        // ===== STEP 2: LẤY TẤT CẢ VARIANTS CÓ EMBEDDING =====
+        console.log('📊 Getting all variants with embeddings...');
+        const allVariants = await this.variantsRepository.find({
+            where: {
+                isActive: true,
+                embedding: { $exists: true, $ne: [] }
+            }
+        });
+        console.log(`📦 Found ${allVariants.length} variants with embeddings`);
 
-  //     // STEP 3: Calculate similarity for each product
-  //     console.log('🔢 Calculating similarities...');
-  //     const similarityResults: Array<{
-  //       product: Product;
-  //       similarity: number;
-  //     }> = [];
+        // ===== STEP 3: TÍNH SIMILARITY CHO TỪNG VARIANT =====
+        console.log('🔢 Calculating similarities...');
+        const similarityResults: Array<{
+            variant: ProductVariant;
+            similarity: number;
+        }> = [];
 
-  //     for (const product of allProducts) {
-  //       if (!product.embedding || product.embedding.length === 0) {
-  //         console.log(`⚠️ Product "${product.name}" has no embedding, skipping`);
-  //         continue;
-  //       }
+        for (const variant of allVariants) {
+            if (!variant.embedding || variant.embedding.length === 0) {
+                continue;
+            }
 
-  //       // Calculate similarity
-  //       const similarity = this.geminiService.calculateSimilarity(
-  //         searchVector,
-  //         product.embedding
-  //       );
+            // Tính cosine similarity
+            const similarity = this.geminiService.calculateSimilarity(
+                searchVector,
+                variant.embedding
+            );
 
-  //       // Only include products with similarity >= 0.3 (30%)
-  //       if (similarity >= 0.3) {
-  //         similarityResults.push({
-  //           product: product,
-  //           similarity: similarity
-  //         });
-  //       }
-  //     }
+            // Chỉ lấy variants có độ giống >= 30%
+            if (similarity >= 0.3) {
+                similarityResults.push({
+                    variant: variant,
+                    similarity: similarity
+                });
+            }
+        }
 
-  //     console.log(`🎯 Found ${similarityResults.length} relevant products`);
+        console.log(`🎯 Found ${similarityResults.length} relevant variants`);
 
-  //     // STEP 4: Sort by similarity (highest first)
-  //     similarityResults.sort((a, b) => b.similarity - a.similarity);
+        // ===== STEP 4: SẮP XẾP THEO ĐỘ GIỐNG (CAO → THẤP) =====
+        similarityResults.sort((a, b) => b.similarity - a.similarity);
 
-  //     // STEP 5: Take top 10 results
-  //     const topResults = similarityResults.slice(0, 10);
+        // ===== STEP 5: LẤY TOP 20 =====
+        const topResults = similarityResults.slice(0, 20);
 
-  //     // STEP 6: Get variants for each product
-  //     const finalResults: Array<{
-  //       product: Product;
-  //       variants: ProductVariant[];
-  //       similarity: number;
-  //     }> = [];
+        // ===== STEP 6: LẤY THÔNG TIN PRODUCT CHO MỖI VARIANT =====
+        const finalResults: Array<{
+            variant: ProductVariant;
+            product: Product;
+            similarity: number;
+        }> = [];
 
-  //     for (const item of topResults) {
-  //       const variants = await this.variantsRepository.find({
-  //         where: { productId: item.product._id, isActive: true },
-  //         order: { price: 'ASC' }
-  //       });
+        // Lấy tất cả product IDs unique
+        const productIds = [...new Set(topResults.map(r => r.variant.productId.toString()))];
+        
+        // Lấy tất cả products cùng lúc (optimize query)
+        const products = await this.productsRepository.find({
+            where: {
+                _id: { $in: productIds.map(id => new ObjectId(id)) },
+                isActive: true
+            }
+        });
 
-  //       if (variants.length > 0) {
-  //         finalResults.push({
-  //           product: item.product,
-  //           variants: variants,
-  //           similarity: item.similarity
-  //         });
-  //       }
-  //     }
+        // Tạo map để lookup nhanh
+        const productMap = new Map(
+            products.map(p => [p._id.toString(), p])
+        );
 
-  //     console.log(`✅ Returning ${finalResults.length} products`);
+        // Kết hợp variant + product
+        for (const item of topResults) {
+            const product = productMap.get(item.variant.productId.toString());
+            
+            if (product) {
+                finalResults.push({
+                    variant: item.variant,
+                    product: product,
+                    similarity: item.similarity
+                });
+            }
+        }
 
-  //     return {
-  //       products: finalResults,
-  //       searchQuery: searchQuery,
-  //       totalFound: finalResults.length
-  //     };
+        console.log(`✅ Returning ${finalResults.length} results`);
 
-  //   } catch (error) {
-  //     console.error('❌ Search error:', error);
-  //     throw new Error(`Search failed: ${error.message}`);
-  //   }
-  // }
+        return {
+            variants: finalResults,
+            searchQuery: searchQuery,
+            totalFound: finalResults.length
+        };
 
+    } catch (error) {
+        console.error('❌ Search error:', error);
+        throw new Error(`Search failed: ${error.message}`);
+    }
+}
   /**
    * 🔄 UPDATE CHỈ MỘT VARIANT CỤ THỂ
    * 

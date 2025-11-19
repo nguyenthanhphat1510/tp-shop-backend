@@ -11,19 +11,21 @@ type ChatResult = {
 @Injectable()
 export class GeminiService {
     private genAI: GoogleGenerativeAI;
-    private readonly logger = new Logger(GeminiService.name); // ✅ Thêm Logger
-    // Thứ tự ưu tiên model: nhanh → nhẹ
+    private readonly logger = new Logger(GeminiService.name);
+    
+    // ✅ CẬP NHẬT: Sử dụng Gemini 2.0 Flash
     private readonly MODEL_CANDIDATES = [
-        process.env.GEMINI_MODEL || 'gemini-1.5-flash',
-        'gemini-1.5-flash-8b',
+        'gemini-2.0-flash-exp',           // Gemini 2.0 Flash (experimental)
+        'gemini-1.5-flash',                // Fallback 1
+        'gemini-1.5-flash-8b',             // Fallback 2
     ];
 
-    // ✅ THÊM MODEL CHUYÊN DỤNG CHO EMBEDDING
-    private readonly EMBEDDING_MODEL = 'embedding-001';
+    // ✅ EMBEDDING MODEL giữ nguyên
+    private readonly EMBEDDING_MODEL = 'text-embedding-004';
 
     // Retry config
     private readonly MAX_RETRIES = 3;
-    private readonly INITIAL_DELAY_MS = 1500; // 1.5s
+    private readonly INITIAL_DELAY_MS = 1500;
     private readonly BACKOFF_FACTOR = 2;
 
     constructor(
@@ -107,7 +109,7 @@ export class GeminiService {
             console.log(`🧠 Tạo vector cho: "${text}"`);
 
             // Gọi Gemini API
-            const model = this.genAI.getGenerativeModel({ model: 'embedding-001' });
+            const model = this.genAI.getGenerativeModel({ model: 'text-embedding-004' });
             const result = await model.embedContent(text);
             
             // Lấy vector

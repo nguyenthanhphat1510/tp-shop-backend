@@ -8,40 +8,50 @@ import { UpdateProductDto } from './dto/update-product.dto';
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) { }
 
-  /**
-   * 🔍 API SEMANTIC SEARCH USING VECTOR
-   * ❌ COMMENT VÌ QUOTA GEMINI HẾT
-   */
-  // @Get('search-vector')
-  // async searchByVector(@Query('q') q: string) {
-  //   try {
-  //     // Validate input
-  //     if (!q || q.trim().length < 2) {
-  //       return {
-  //         success: false,
-  //         message: 'Please enter at least 2 characters to search'
-  //       };
-  //     }
+/**
+ * 🔍 API SEMANTIC SEARCH USING VECTOR
+ * ✅ ĐÃ BẬT LẠI
+ */
+@Get('search-vector')
+async searchByVector(@Query('q') q: string) {
+  try {
+    // Validate input
+    if (!q || q.trim().length < 2) {
+      return {
+        success: false,
+        message: 'Vui lòng nhập ít nhất 2 ký tự để tìm kiếm',
+        data: {
+          variants: [],
+          searchQuery: q || '',
+          totalFound: 0
+        }
+      };
+    }
 
-  //     console.log(`🤖 Vector search: "${q}"`);
+    console.log(`🤖 Vector search: "${q}"`);
 
-  //     // Call service search method
-  //     const result = await this.productsService.searchByVector(q.trim());
+    // Call service search method
+    const result = await this.productsService.searchByVector(q.trim());
 
-  //     return {
-  //       success: true,
-  //       message: `Found ${result.totalFound} products for "${q}"`,
-  //       data: result
-  //     };
+    return {
+      success: true,
+      message: `Tìm thấy ${result.totalFound} sản phẩm cho "${q}"`,
+      data: result
+    };
 
-  //   } catch (error) {
-  //     console.error('❌ Search API error:', error);
-  //     return {
-  //       success: false,
-  //       message: `Error: ${error.message}`
-  //     };
-  //   }
-  // }
+  } catch (error) {
+    console.error('❌ Search API error:', error);
+    return {
+      success: false,
+      message: `Lỗi tìm kiếm: ${error.message}`,
+      data: {
+        variants: [],
+        searchQuery: q || '',
+        totalFound: 0
+      }
+    };
+  }
+}
 
   // ✅ UNLIMITED VARIANTS + 5 IMAGES PER VARIANT
   @Post()
