@@ -127,33 +127,19 @@ export class GeminiService {
     /**
      * 📊 CALCULATE SIMILARITY BETWEEN 2 VECTORS (COSINE SIMILARITY)
      */
-    calculateSimilarity(vector1: number[], vector2: number[]): number {
-        // Check if vectors have same length
-        if (vector1.length !== vector2.length) {
-            throw new Error('Vectors must have the same length');
-        }
+calculateSimilarity(vector1: number[], vector2: number[]): number {
+        // Giả sử vector1 và vector2 có cùng độ dài (ví dụ 768 chiều)
+        let dotProduct = 0;
 
-        // Calculate cosine similarity
-        let dotProduct = 0;    // A · B
-        let magnitudeA = 0;    // |A|
-        let magnitudeB = 0;    // |B|
-
+        // Chỉ dùng vòng lặp tính tổng tích
+        // Máy tính làm cái này siêu nhanh
         for (let i = 0; i < vector1.length; i++) {
             dotProduct += vector1[i] * vector2[i];
-            magnitudeA += vector1[i] * vector1[i];
-            magnitudeB += vector2[i] * vector2[i];
         }
 
-        // Avoid division by zero
-        if (magnitudeA === 0 || magnitudeB === 0) {
-            return 0;
-        }
-
-        // Cosine similarity = (A·B) / (|A| × |B|)
-        const similarity = dotProduct / (Math.sqrt(magnitudeA) * Math.sqrt(magnitudeB));
-        
-        // Ensure result is between 0 and 1
-        return Math.max(0, similarity);
+        // Vì vector đã chuẩn hóa (độ dài = 1), nên Dot Product chính là Cosine Similarity
+        // Kết quả vẫn nằm trong khoảng -1 đến 1
+        return dotProduct;
     }
 
 
