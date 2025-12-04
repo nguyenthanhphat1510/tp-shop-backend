@@ -8,18 +8,72 @@ import { UpdateProductDto } from './dto/update-product.dto';
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) { }
 
-/**
- * 🔍 API SEMANTIC SEARCH USING VECTOR
- * ✅ ĐÃ BẬT LẠI
- */
-@Get('search-vector')
-async searchByVector(@Query('q') q: string) {
-  try {
-    // Validate input
-    if (!q || q.trim().length < 2) {
+  /**
+   * 🔍 API SEMANTIC SEARCH USING VECTOR
+   * ✅ ĐÃ BẬT LẠI
+   */
+  /**
+     * 💡 API SEARCH SUGGESTIONS (AUTOCOMPLETE)
+     * Trả về danh sách tên sản phẩm gợi ý dựa trên từ khóa
+     */
+  @Get('suggestions')
+  async getSuggestions(@Query('q') q: string) {
+    try {
+      if (!q || q.trim().length < 1) {
+        return {
+          success: true,
+          data: []
+        };
+      }
+
+      const suggestions = await this.productsService.getSuggestions(q.trim());
+
+      return {
+        success: true,
+        data: suggestions
+      };
+    } catch (error) {
+      console.error('❌ Error getting suggestions:', error);
       return {
         success: false,
-        message: 'Vui lòng nhập ít nhất 2 ký tự để tìm kiếm',
+        message: error.message,
+        data: []
+      };
+    }
+  }
+
+  @Get('search-vector')
+  async searchByVector(@Query('q') q: string) {
+    try {
+      // Validate input
+      if (!q || q.trim().length < 2) {
+        return {
+          success: false,
+          message: 'Vui lòng nhập ít nhất 2 ký tự để tìm kiếm',
+          data: {
+            variants: [],
+            searchQuery: q || '',
+            totalFound: 0
+          }
+        };
+      }
+
+      console.log(`🤖 Vector search: "${q}"`);
+
+      // Call service search method
+      const result = await this.productsService.searchByVector(q.trim());
+
+      return {
+        success: true,
+        message: `Tìm thấy ${result.totalFound} sản phẩm cho "${q}"`,
+        data: result
+      };
+
+    } catch (error) {
+      console.error('❌ Search API error:', error);
+      return {
+        success: false,
+        message: `Lỗi tìm kiếm: ${error.message}`,
         data: {
           variants: [],
           searchQuery: q || '',
@@ -27,31 +81,7 @@ async searchByVector(@Query('q') q: string) {
         }
       };
     }
-
-    console.log(`🤖 Vector search: "${q}"`);
-
-    // Call service search method
-    const result = await this.productsService.searchByVector(q.trim());
-
-    return {
-      success: true,
-      message: `Tìm thấy ${result.totalFound} sản phẩm cho "${q}"`,
-      data: result
-    };
-
-  } catch (error) {
-    console.error('❌ Search API error:', error);
-    return {
-      success: false,
-      message: `Lỗi tìm kiếm: ${error.message}`,
-      data: {
-        variants: [],
-        searchQuery: q || '',
-        totalFound: 0
-      }
-    };
   }
-}
 
   // ✅ UNLIMITED VARIANTS + 5 IMAGES PER VARIANT
   @Post()
@@ -411,5 +441,5 @@ async searchByVector(@Query('q') q: string) {
       throw error;
     }
   }
-  
+
 }

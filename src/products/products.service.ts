@@ -1526,4 +1526,34 @@ async searchByVector(searchQuery: string): Promise<{
       throw new BadRequestException(`Lỗi lấy danh sách sản phẩm không giảm giá: ${error.message}`);
     }
   }
+
+  /**
+   * 💡 LẤY DANH SÁCH GỢI Ý (AUTOCOMPLETE)
+   * Tìm kiếm nhanh theo tên sản phẩm chứa từ khóa
+   */
+  async getSuggestions(query: string): Promise<string[]> {
+    try {
+      // Escape các ký tự đặc biệt của Regex để tránh lỗi
+      const cleanQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      // Tạo RegExp tìm kiếm không phân biệt hoa thường (case-insensitive)
+      const searchRegex = new RegExp(cleanQuery, 'i');
+
+      // Tìm top 10 sản phẩm khớp tên
+      const products = await this.productsRepository.find({
+        where: { 
+            name: { $regex: searchRegex },
+            isActive: true 
+        },
+        take: 10,
+        order: { name: 'ASC' }
+      });
+
+      // Chỉ trả về mảng các tên sản phẩm
+      return products.map(p => p.name);
+    } catch (error) {
+      console.error('❌ Error searching suggestions:', error);
+      return []; // Trả về mảng rỗng nếu lỗi, không throw để tránh crash UI search bar
+    }
+  }
 }
